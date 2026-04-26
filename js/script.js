@@ -264,19 +264,23 @@
       const saved = localStorage.getItem('chat_roleplay_config_v2');
       if (saved) config = { ...config, ...JSON.parse(saved) };
     } catch(e) {}
-    apiKeyInput.value = config.apiKey || '';
-    apiUrlInput.value = config.apiUrl;
-    modelInput.value = config.model;
+
+    const setVal = (el, val) => { if (el) el.value = val; };
+
+    setVal(apiKeyInput, config.apiKey || '');
+    setVal(apiUrlInput, config.apiUrl);
+    setVal(modelInput, config.model);
+    
     // 加载配置到表单
     if (config.characterName) {
-      charNameInput.value = config.characterName;
+      setVal(charNameInput, config.characterName);
     }
-    characterBioInput.value = config.characterBio || '';
-    charAgeInput.value = config.characterAge || '';
-    charGenderInput.value = config.characterGender || '';
-    charMemoriesInput.value = config.characterMemories || '';
-    charExamplesInput.value = config.exampleDialog || '';
-    systemPromptInput.value = config.systemPrompt;
+    setVal(characterBioInput, config.characterBio || '');
+    setVal(charAgeInput, config.characterAge || '');
+    setVal(charGenderInput, config.characterGender || '');
+    setVal(charMemoriesInput, config.characterMemories || '');
+    setVal(charExamplesInput, config.exampleDialog || '');
+    setVal(systemPromptInput, config.systemPrompt);
 
     // 更新 UI 显示
     updateChatTitle();
@@ -308,18 +312,20 @@
   }
 
   function syncConfigFromForm() {
-    config.apiKey = apiKeyInput.value.trim();
-    config.apiUrl = apiUrlInput.value.trim();
-    config.model = modelInput.value.trim();
+    const getVal = (el) => el ? el.value.trim() : '';
 
-    config.characterName = charNameInput.value.trim() || '青绿角色';
+    config.apiKey = getVal(apiKeyInput);
+    config.apiUrl = getVal(apiUrlInput);
+    config.model = getVal(modelInput);
 
-    config.characterBio = characterBioInput.value.trim();
-    config.characterAge = charAgeInput.value.trim();
-    config.characterGender = charGenderInput.value.trim();
-    config.characterMemories = charMemoriesInput.value.trim();
-    config.exampleDialog = charExamplesInput.value.trim();
-    config.systemPrompt = systemPromptInput.value.trim();
+    config.characterName = getVal(charNameInput) || '青绿角色';
+
+    config.characterBio = getVal(characterBioInput);
+    config.characterAge = getVal(charAgeInput);
+    config.characterGender = getVal(charGenderInput);
+    config.characterMemories = getVal(charMemoriesInput);
+    config.exampleDialog = getVal(charExamplesInput);
+    config.systemPrompt = getVal(systemPromptInput);
   }
 
   function applyConfig() {
@@ -598,17 +604,21 @@
       const saved = localStorage.getItem('character_data');
       if (saved) characterData = { ...characterData, ...JSON.parse(saved) };
     } catch(e) {}
-    worldBookInput.value = characterData.worldBook || '';
-    charNameInput.value = characterData.name || '';
-    charAgeInput.value = characterData.age || '';
-    charGenderInput.value = characterData.gender || '';
-    charAppearanceInput.value = characterData.appearance || '';
-    charPersonalityInput.value = characterData.personality || '';
-    charBackstoryInput.value = characterData.backstory || '';
-    charMemoriesInput.value = characterData.memories || '';
-    charStyleInput.value = characterData.style || '';
-    charExamplesInput.value = characterData.examples || '';
-    characterBioInput.value = characterData.bio || '温柔而冷静的陪伴';
+    
+    const setVal = (el, val) => { if (el) el.value = val; };
+
+    setVal(worldBookInput, characterData.worldBook || '');
+    setVal(charNameInput, characterData.name || '');
+    setVal(charAgeInput, characterData.age || '');
+    setVal(charGenderInput, characterData.gender || '');
+    setVal(charAppearanceInput, characterData.appearance || '');
+    setVal(charPersonalityInput, characterData.personality || '');
+    setVal(charBackstoryInput, characterData.backstory || '');
+    setVal(charMemoriesInput, characterData.memories || '');
+    setVal(charStyleInput, characterData.style || '');
+    setVal(charExamplesInput, characterData.examples || '');
+    setVal(characterBioInput, characterData.bio || '温柔而冷静的陪伴');
+    
     updateCharacterPreview();
     updateMemoriesCards();
     updateExampleBubbles();
@@ -701,25 +711,27 @@
   charExamplesInput?.addEventListener('input', updateExampleBubbles);
 
   function saveCharacterToStorage() {
+    const getVal = (el) => el ? el.value.trim() : '';
+
     characterData = {
-      worldBook: worldBookInput.value.trim(),
-      name: charNameInput.value.trim(),
-      age: charAgeInput.value.trim(),
-      gender: charGenderInput.value.trim(),
-      appearance: charAppearanceInput.value.trim(),
-      personality: charPersonalityInput.value.trim(),
-      backstory: charBackstoryInput.value.trim(),
-      memories: charMemoriesInput.value.trim(),
-      style: charStyleInput.value.trim(),
-      examples: charExamplesInput.value.trim(),
+      worldBook: getVal(worldBookInput),
+      name: getVal(charNameInput),
+      age: getVal(charAgeInput),
+      gender: getVal(charGenderInput),
+      appearance: getVal(charAppearanceInput),
+      personality: getVal(charPersonalityInput),
+      backstory: getVal(charBackstoryInput),
+      memories: getVal(charMemoriesInput),
+      style: getVal(charStyleInput),
+      examples: getVal(charExamplesInput),
       avatar: characterData.avatar,
       cover: characterData.cover,
-      bio: characterBioInput.value.trim()
+      bio: getVal(characterBioInput)
     };
     try {
       localStorage.setItem('character_data', JSON.stringify(characterData));
       updateCharacterPreview();
-      config.characterName = charNameInput.value.trim() || '青绿助手';
+      config.characterName = getVal(charNameInput) || '青绿助手';
       updateChatTitle();
       showToast('人物设定已保存');
     } catch(e) {
@@ -742,10 +754,11 @@
         characterPreviewAvatar.innerHTML = '<i class="fas fa-user-astronaut"></i>';
       }
     }
-    const namePart1 = charNameInput.value.trim();
+    const getVal = (el) => el ? el.value.trim() : '';
+    const namePart1 = getVal(charNameInput);
     const fullName = namePart1 || '角色名称';
 
-    const bio = characterBioInput.value.trim() || '温柔而冷静的陪伴';
+    const bio = getVal(characterBioInput) || '温柔而冷静的陪伴';
     if (characterPreviewName) characterPreviewName.textContent = fullName;
     if (characterPreviewBio) characterPreviewBio.innerHTML = `<i class="fas fa-quote-left mr-8"></i>${bio}`;
 
@@ -757,25 +770,26 @@
     async function callAI(userMessage, customSystemPrompt = null) {
         if (!config.apiKey) throw new Error('请先配置 API Key');
 
+        const getVal = (el) => el ? el.value : '';
         // 整合人设信息
         const charInfo = `
     【角色信息】
-    姓名：${charNameInput.value}
-    年龄：${charAgeInput.value}
-    性别：${charGenderInput.value}
-    外貌：${charAppearanceInput.value}
-    性格：${charPersonalityInput.value}
-    经历：${charBackstoryInput.value}
-    记忆：${charMemoriesInput.value}
-    对话风格：${charStyleInput.value}
+    姓名：${getVal(charNameInput)}
+    年龄：${getVal(charAgeInput)}
+    性别：${getVal(charGenderInput)}
+    外貌：${getVal(charAppearanceInput)}
+    性格：${getVal(charPersonalityInput)}
+    经历：${getVal(charBackstoryInput)}
+    记忆：${getVal(charMemoriesInput)}
+    对话风格：${getVal(charStyleInput)}
     对话示例（必须严格模仿）：
-    ${charExamplesInput.value}
+    ${getVal(charExamplesInput)}
     `.trim();
 
         const systemMsg = {
             role: 'system',
             content: customSystemPrompt || `
-    ${systemPromptInput.value}
+    ${getVal(systemPromptInput)}
 
     ${charInfo}
 
