@@ -54,6 +54,14 @@
   const editCharacterAvatarBtn = document.getElementById('editCharacterAvatarBtn');
   const editCharacterCoverBtn = document.getElementById('editCharacterCoverBtn');
 
+  const commonDialogOverlay = document.getElementById('commonDialogOverlay');
+  const dialogTitle = document.getElementById('dialogTitle');
+  const dialogMessage = document.getElementById('dialogMessage');
+  const dialogCustomBody = document.getElementById('dialogCustomBody');
+  const dialogConfirmBtn = document.getElementById('dialogConfirmBtn');
+  const dialogCancelBtn = document.getElementById('dialogCancelBtn');
+  const closeCommonDialog = document.getElementById('closeCommonDialog');
+
   const batchSendBtn = document.getElementById('batchSendBtn');
   const batchSendModalOverlay = document.getElementById('batchSendModalOverlay');
   const closeBatchSendModal = document.getElementById('closeBatchSendModal');
@@ -288,8 +296,7 @@
 
   function updateChatTitle() {
     const namePart1 = charNameInput.value.trim();
-    const namePart2 = characterNameInput.value.trim();
-    const fullName = [namePart1, namePart2].filter(Boolean).join(' ') || '青绿角色';
+    const fullName = namePart1 || '青绿角色';
     chatTitleDisplay.textContent = fullName;
   }
 
@@ -325,6 +332,30 @@
     saveConfigToStorage();
     updateChatTitle();
     updateApiStatusBadge();
+  }
+
+  function updateModelVisibility() {
+    const provider = apiProviderSelect.value;
+    const optgroups = modelSelect.querySelectorAll('optgroup');
+    optgroups.forEach(group => {
+      if (group.label.toLowerCase().includes(provider.toLowerCase()) || 
+          (provider === 'custom' && group.label === '其他')) {
+        group.style.display = '';
+      } else {
+        group.style.display = 'none';
+      }
+    });
+
+    // 如果当前选中的模型在隐藏的组里，自动选择该组的第一个
+    const currentOption = modelSelect.options[modelSelect.selectedIndex];
+    const currentGroup = currentOption.parentElement;
+    if (currentGroup.style.display === 'none') {
+      const firstVisibleGroup = Array.from(optgroups).find(g => g.style.display !== 'none');
+      if (firstVisibleGroup && firstVisibleGroup.options.length > 0) {
+        modelSelect.value = firstVisibleGroup.options[0].value;
+        updateModelInputFromSelect();
+      }
+    }
   }
 
   // ---------- 消息渲染 ----------
@@ -439,11 +470,16 @@
   };
 
   window.deleteMessage = function(index) {
-    if (confirm('确定删除这条消息吗？')) {
-      messages.splice(index, 1);
-      saveMessagesToStorage();
-      renderMessages();
-    }
+    showCommonDialog({
+      title: '删除消息',
+      message: '确定要删除这条消息吗？此操作不可撤销。',
+      confirmText: '删除',
+      onConfirm: () => {
+        messages.splice(index, 1);
+        saveMessagesToStorage();
+        renderMessages();
+      }
+    });
   };
 
   window.favoriteMessage = function(index) {
@@ -453,24 +489,35 @@
     charMemoriesInput.value = currentMemories + newMemory;
     updateMemoriesCards();
     saveCharacterToStorage();
-    showToast('已将该消息内容收藏至核心记忆！');
+    
+    showCommonDialog({
+      title: '收藏成功',
+      message: '已将该消息内容收藏至核心记忆！',
+      showCancel: false,
+      confirmText: '知道了'
+    });
   };
 
   window.editMessage = function(index) {
     const msg = messages[index];
-    const newContent = prompt('修改消息内容：', msg.content);
-    if (newContent !== null && newContent !== msg.content) {
-      const oldContent = msg.content;
-      msg.content = newContent;
-
-      // 如果是 AI 的回复被修改，触发 AI 自主学习
-      if (msg.role === 'assistant') {
-        analyzeAndLearn(oldContent, newContent);
+    const inputId = 'editMessageInput_' + index;
+    const customBody = `<textarea id="${inputId}" class="w-full mt-10" rows="5" style="padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg-side); color:var(--text-main);">${msg.content}</textarea>`;
+    
+    showCommonDialog({
+      title: '修改消息',
+      customBody: customBody,
+      confirmText: '保存修改',
+      onConfirm: () => {
+        const newContent = document.getElementById(inputId).value.trim();
+        if (newContent && newContent !== msg.content) {
+          const oldContent = msg.content;
+          msg.content = newContent;
+          if (msg.role === 'assistant') analyzeAndLearn(oldContent, newContent);
+          saveMessagesToStorage();
+          renderMessages();
+        }
       }
-
-      saveMessagesToStorage();
-      renderMessages();
-    }
+    });
   };
 
   async function analyzeAndLearn(oldVal, newVal) {
@@ -701,8 +748,7 @@
       }
     }
     const namePart1 = charNameInput.value.trim();
-    const namePart2 = characterNameInput.value.trim();
-    const fullName = [namePart1, namePart2].filter(Boolean).join(' ') || '角色名称';
+    const fullName = namePart1 || '角色名称';
 
     const bio = characterBioInput.value.trim() || '温柔而冷静的陪伴';
     if (characterPreviewName) characterPreviewName.textContent = fullName;
@@ -719,7 +765,7 @@
         // 整合人设信息
         const charInfo = `
     【角色信息】
-    姓名：${charNameInput.value} ${characterNameInput.value}
+    姓名：${charNameInput.value}
     年龄：${charAgeInput.value}
     性别：${charGenderInput.value}
     外貌：${charAppearanceInput.value}
@@ -1092,6 +1138,29 @@
     }
   }
 
+  // ---------- 通用弹窗逻辑 ----------
+  function showCommonDialog({ title = '提示', message = '', customBody = '', confirmText = '确定', cancelText = '取消', showCancel = true, onConfirm = null }) {
+    dialogTitle.textContent = title;
+    dialogMessage.textContent = message;
+    dialogMessage.style.display = message ? 'block' : 'none';
+    dialogCustomBody.innerHTML = customBody;
+    dialogConfirmBtn.textContent = confirmText;
+    dialogCancelBtn.textContent = cancelText;
+    dialogCancelBtn.style.display = showCancel ? 'inline-block' : 'none';
+
+    commonDialogOverlay.style.display = 'flex';
+
+    const close = () => { commonDialogOverlay.style.display = 'none'; };
+
+    dialogConfirmBtn.onclick = () => {
+      if (onConfirm) onConfirm();
+      close();
+    };
+    dialogCancelBtn.onclick = close;
+    closeCommonDialog.onclick = close;
+    commonDialogOverlay.onclick = (e) => { if (e.target === commonDialogOverlay) close(); };
+  }
+
   // ---------- 数据管理 ----------
   function getByteSize(str) { return new Blob([str]).size; }
   function formatSize(bytes) {
@@ -1155,11 +1224,17 @@
     reader.onload = (e) => {
       try {
         const data = JSON.parse(e.target.result);
-        if (!confirm('导入将覆盖当前所有数据，确定继续吗？')) return;
-        localStorage.clear();
-        Object.entries(data).forEach(([k,v])=>localStorage.setItem(k,v));
-        alert('导入成功，页面将刷新。');
-        location.reload();
+        showCommonDialog({
+          title: '导入数据',
+          message: '导入将覆盖当前所有数据，确定继续吗？',
+          confirmText: '确定导入',
+          onConfirm: () => {
+            localStorage.clear();
+            Object.entries(data).forEach(([k,v])=>localStorage.setItem(k,v));
+            alert('导入成功，页面将刷新。');
+            location.reload();
+          }
+        });
       } catch(err) { alert('导入失败：'+err.message); }
     };
     reader.readAsText(file);
@@ -1184,8 +1259,18 @@
     overlay.addEventListener('click', closeDrawer);
     saveConfigBtn.addEventListener('click', ()=>{ applyConfig(); closeDrawer(); });
     testConnectionBtn.addEventListener('click', testConnection);
-    clearChatBtn.addEventListener('click', ()=>{ if(confirm('清空对话？')) resetConversation(); });
-    apiProviderSelect.addEventListener('change', updateApiUrlFromProvider);
+    clearChatBtn.addEventListener('click', ()=>{
+      showCommonDialog({
+        title: '清空对话',
+        message: '确定要清空所有对话记录吗？此操作不可撤销。',
+        confirmText: '清空',
+        onConfirm: () => resetConversation()
+      });
+    });
+    apiProviderSelect.addEventListener('change', () => {
+      updateApiUrlFromProvider();
+      updateModelVisibility();
+    });
     modelSelect.addEventListener('change', updateModelInputFromSelect);
 
     chatIcon.addEventListener('click', ()=>setActiveView('chat'));
@@ -1196,11 +1281,16 @@
 
     saveCharacterBtn.addEventListener('click', saveCharacterToStorage);
     resetCharacterBtn.addEventListener('click', ()=>{
-      if(confirm('重置所有人物设定？')) {
-        localStorage.removeItem('character_data');
-        characterData = { worldBook:'',name:'',avatar:'',cover:'',bio:'',age:'',gender:'',appearance:'',personality:'',backstory:'',memories:'',style:'',examples:'' };
-        loadCharacterFromStorage();
-      }
+      showCommonDialog({
+        title: '重置设定',
+        message: '确定要重置所有人物设定吗？',
+        confirmText: '重置',
+        onConfirm: () => {
+          localStorage.removeItem('character_data');
+          characterData = { worldBook:'',name:'',avatar:'',cover:'',bio:'',age:'',gender:'',appearance:'',personality:'',backstory:'',memories:'',style:'',examples:'' };
+          loadCharacterFromStorage();
+        }
+      });
     });
 
     editCharacterAvatarBtn.addEventListener('click', ()=>{
@@ -1254,6 +1344,7 @@
     setTimeout(refreshStorageStats, 100);
     initUploadButtons();
     updateCharacterPreview();
+    updateModelVisibility();
 
     // 批量发送相关
     const closeBatchModal = () => { batchSendModalOverlay.style.display = 'none'; };
