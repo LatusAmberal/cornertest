@@ -936,17 +936,14 @@
         const reply = await callAI(lastUserContent);
         const cleaned = cleanParentheses(reply);
 
-        // 限制回复的消息条数，不要因为用户发了多条就回更多
-        const sentences = cleaned.split(/(?<=[。！？!?])/g)
+        // 按照句号、问号、感叹号以及换行符进行拆分
+        // 修改：对方换行和使用句号=发送下一条消息到气泡
+        const sentences = cleaned.split(/(?<=[。\.！？!?\n])/g)
                                  .map(s => s.trim())
                                  .filter(s => s.length > 0);
 
-        // 限制最多回复 2-3 条消息，使回复更真实
-        const maxReplies = Math.floor(Math.random() * 2) + 1; // 1-2条
-        const finalSentences = sentences.slice(0, maxReplies);
-
         removeTypingIndicator();
-        for (const sentence of finalSentences) {
+        for (const sentence of sentences) {
           showTypingIndicator();
           const charCount = sentence.length;
           let typingDelay = Math.min(6000, Math.max(1000, charCount * 60));
@@ -1157,9 +1154,9 @@
     dialogCancelBtn.textContent = cancelText;
     dialogCancelBtn.style.display = showCancel ? 'inline-block' : 'none';
 
-    commonDialogOverlay.style.display = 'flex';
+    commonDialogOverlay.classList.add('show');
 
-    const close = () => { commonDialogOverlay.style.display = 'none'; };
+    const close = () => { commonDialogOverlay.classList.remove('show'); };
 
     dialogConfirmBtn.onclick = () => {
       if (onConfirm) onConfirm();
@@ -1355,7 +1352,7 @@
     updateModelVisibility();
 
     // 批量发送相关
-    const closeBatchModal = () => { batchSendModalOverlay.style.display = 'none'; };
+    const closeBatchModal = () => { batchSendModalOverlay.classList.remove('show'); };
     const handleBatchSend = () => {
       const content = batchMessageInput.value.trim();
       if (!content) return;
@@ -1368,7 +1365,7 @@
     };
 
     batchSendBtn?.addEventListener('click', () => { 
-      batchSendModalOverlay.style.display = 'flex'; 
+      batchSendModalOverlay.classList.add('show'); 
       batchMessageInput.focus(); 
     });
     closeBatchSendModal?.addEventListener('click', closeBatchModal);
