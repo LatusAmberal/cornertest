@@ -194,11 +194,8 @@
             <div class="settings-card">
                 <h3><i class="fas fa-id-card"></i> 人物表单</h3>
                 <div class="config-group">
-                    <label>角色姓名 & 名称（空格分隔）</label>
-                    <div class="flex-gap-10">
-                        <input type="text" id="charNameInput" placeholder="姓名（如：林清瑶）" class="flex-1">
-                        <input type="text" id="characterNameInput" placeholder="名称（如：清瑶）" class="flex-1">
-                    </div>
+                    <label>角色姓名</label>
+                    <input type="text" id="charNameInput" placeholder="姓名（如：林清瑶）" class="w-full">
                 </div>
                 <div class="config-group">
                     <label>个性签名</label>
@@ -394,6 +391,24 @@
             </div>
             <div class="fs-12 opacity-5 mt-20 pt-16 bt-1">
                 <i class="fas fa-info-circle"></i> 完整 API 设置请点击左侧齿轮图标。
+            </div>
+        </div>
+    </div>
+
+    <!-- 通用对话框模态框 -->
+    <div class="modal-overlay" id="commonDialogOverlay" style="display: none;">
+        <div class="modal-container w-400">
+            <div class="modal-header">
+                <h3 id="dialogTitle">提示</h3>
+                <button class="modal-close" id="closeCommonDialog">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="dialogMessage" class="fs-15 text-center py-10"></p>
+                <div id="dialogCustomBody"></div>
+            </div>
+            <div class="modal-footer" id="dialogFooter">
+                <button class="btn btn-secondary" id="dialogCancelBtn">取消</button>
+                <button class="btn btn-primary" id="dialogConfirmBtn">确定</button>
             </div>
         </div>
     </div>
