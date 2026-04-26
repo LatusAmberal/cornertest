@@ -54,6 +54,13 @@
   const editCharacterAvatarBtn = document.getElementById('editCharacterAvatarBtn');
   const editCharacterCoverBtn = document.getElementById('editCharacterCoverBtn');
 
+  const batchSendBtn = document.getElementById('batchSendBtn');
+  const batchSendModalOverlay = document.getElementById('batchSendModalOverlay');
+  const closeBatchSendModal = document.getElementById('closeBatchSendModal');
+  const cancelBatchSendBtn = document.getElementById('cancelBatchSendBtn');
+  const confirmBatchSendBtn = document.getElementById('confirmBatchSendBtn');
+  const batchMessageInput = document.getElementById('batchMessageInput');
+
   // ---------- 状态 ----------
   let messages = (() => {
     const saved = localStorage.getItem('chat_messages');
@@ -376,12 +383,12 @@
 
       const safe = escapeHtml(msg.content).replace(/\n/g, '<br>');
 
-      // 已读未读状态，移动到气泡末尾部分
+      // 已读未读状态，移动到气泡外侧（左侧下方）
       let statusHtml = '';
       if (msg.role === 'user' && msg.readStatus) {
         const readClass = msg.readStatus === 'read' ? 'read' : 'unread';
         const readText = msg.readStatus === 'read' ? '已读' : '未读';
-        statusHtml = `<span class="read-status-inline ${readClass}">${readText}</span>`;
+        statusHtml = `<span class="read-status-outside ${readClass}">${readText}</span>`;
       }
 
       let bubble = `
@@ -389,7 +396,6 @@
           <div class="bubble-content">${safe}</div>
           <div class="message-info">
             <div class="message-time">${formatTime(msgTime)}</div>
-            ${statusHtml}
           </div>
           <!-- 悬停操作菜单 -->
           <div class="bubble-actions">
@@ -399,7 +405,11 @@
           </div>
         </div>`;
 
-      html += `<div class="message-row ${msg.role}">${bubble}</div>`;
+      if (msg.role === 'user' && statusHtml) {
+        html += `<div class="message-row ${msg.role}">${statusHtml}${bubble}</div>`;
+      } else {
+        html += `<div class="message-row ${msg.role}">${bubble}</div>`;
+      }
 
       lastTimestamp = msgTime;
       lastDateKey = msgDateKey;
@@ -802,16 +812,18 @@
   }
 
   // ---------- 发送消息 ----------
-  async function handleSendMessage() {
+  async function handleSendMessage(overrideSegments = null) {
     const content = messageInput.value.trim();
-    if (!content || isGenerating) return;
+    if (!overrideSegments && (!content || isGenerating)) return;
 
-    // 分割多条消息（按空行分割）
-    const userSegments = content.split(/\n\s*\n/).filter(s => s.trim() !== '');
+    // 分割多条消息（如果是批量发送，按行分割；如果是普通发送，按空行分割）
+    const userSegments = overrideSegments || content.split(/\n\s*\n/).filter(s => s.trim() !== '');
     if (userSegments.length === 0) return;
 
-    messageInput.value = '';
-    messageInput.style.height = 'auto';
+    if (!overrideSegments) {
+      messageInput.value = '';
+      messageInput.style.height = 'auto';
+    }
     isGenerating = true;
     sendBtn.disabled = true;
 
@@ -1242,6 +1254,30 @@
     setTimeout(refreshStorageStats, 100);
     initUploadButtons();
     updateCharacterPreview();
+
+    // 批量发送相关
+    const closeBatchModal = () => { batchSendModalOverlay.style.display = 'none'; };
+    const handleBatchSend = () => {
+      const content = batchMessageInput.value.trim();
+      if (!content) return;
+      const lines = content.split('\n').map(l => l.trim()).filter(l => l !== '');
+      if (lines.length > 0) {
+        handleSendMessage(lines);
+        batchMessageInput.value = '';
+        closeBatchModal();
+      }
+    };
+
+    batchSendBtn?.addEventListener('click', () => { 
+      batchSendModalOverlay.style.display = 'flex'; 
+      batchMessageInput.focus(); 
+    });
+    closeBatchSendModal?.addEventListener('click', closeBatchModal);
+    cancelBatchSendBtn?.addEventListener('click', closeBatchModal);
+    batchSendModalOverlay?.addEventListener('click', (e) => { 
+      if(e.target === batchSendModalOverlay) closeBatchModal(); 
+    });
+    confirmBatchSendBtn?.addEventListener('click', handleBatchSend);
   }
 
   init();
