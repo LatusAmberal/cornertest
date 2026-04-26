@@ -1084,6 +1084,18 @@
       fileInput.onchange = (e) => { const f = e.target.files[0]; if (f) openCropModal(f, 'cover'); fileInput.value = ''; };
       fileInput.click();
     });
+
+    // 新增：主页直接上传按钮
+    document.getElementById('directUploadAvatarBtn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.onchange = (e) => { const f = e.target.files[0]; if (f) openCropModal(f, 'avatar'); fileInput.value = ''; };
+      fileInput.click();
+    });
+    document.getElementById('directUploadCoverBtn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.onchange = (e) => { const f = e.target.files[0]; if (f) openCropModal(f, 'cover'); fileInput.value = ''; };
+      fileInput.click();
+    });
     closeCropModal?.addEventListener('click', closeCropModalFunc);
     cancelCropBtn?.addEventListener('click', closeCropModalFunc);
     saveCropBtn?.addEventListener('click', saveCroppedImage);
