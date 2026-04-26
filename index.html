@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>一隅·aCorner</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="logos/favicon-32.ico">
+    <link rel="apple-touch-icon" sizes="180x180" href="logos/logo-180.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="logos/logo-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="logos/logo-512.png">
+    <link rel="apple-touch-icon" href="logos/logo-180.png">
+
+    <!-- PWA 设置 -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="一隅">
+    <meta name="theme-color" content="#0f9960">
+    <meta name="msapplication-TileColor" content="#0f9960">
+
+    <!-- 外部样式 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+    <link rel="stylesheet" href="https://github.com/LatusAmberal/corner/blob/main/css/style.css">
+</head>
+<body>
+<div class="app">
+    <!-- 左侧菜单 -->
+    <aside class="sidebar">
+        <div class="sidebar-icon active" title="当前对话"><i class="fas fa-comment-dots"></i></div>
+        <div class="sidebar-icon" title="人物管理" id="characterIcon"><i class="fas fa-user-tag"></i></div>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-icon" title="设置"><i class="fas fa-cog"></i></div>
+        <div class="sidebar-icon" title="数据管理" id="dataManagerIcon"><i class="fas fa-database"></i></div>
+        <div class="sidebar-icon" title="更多"><i class="fas fa-plus"></i></div>
+        <div class="sidebar-footer">
+            <div class="user-avatar" id="userAvatarBtn" title="个人主页">
+                <i class="fas fa-user"></i>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 聊天主体 -->
+    <main class="chat-main" id="chatMain">
+        <!-- 聊天视图 -->
+        <div class="chat-view" id="chatView">
+            <header class="chat-header">
+                <div class="header-left"></div>
+                <div class="chat-title" id="chatTitleDisplay">✨ 青绿角色</div>
+                <div class="header-right">
+                    <button class="menu-btn" id="configMenuBtn" title="API 设置 · 主题切换"><i class="fas fa-ellipsis-h"></i></button>
+                </div>
+            </header>
+            <div class="messages-area" id="messagesArea">
+                <div class="message-row assistant">
+                    <div class="message-bubble">
+                        你好！我是青绿色调的角色。点击左侧齿轮设置 API。
+                        <div class="message-time">刚刚</div>
+                    </div>
+                </div>
+            </div>
+            <div class="input-area">
+                <div class="input-container">
+                    <textarea id="messageInput" placeholder="输入消息… (Enter发送)" rows="1"></textarea>
+                    <button class="send-btn" id="sendBtn" title="发送"><i class="fas fa-paper-plane"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 设置视图 -->
+        <div class="settings-view" id="settingsView">
+            <h2 class="mb-20 fw-500"><i class="fas fa-cog mr-12"></i>设置</h2>
+            <div class="settings-card">
+                <h3><i class="fas fa-palette"></i> 外观</h3>
+                <div class="flex-between">
+                    <span class="theme-toggle-label"><i class="fas fa-moon"></i> 深色模式</span>
+                    <div class="apple-toggle" id="themeToggleSettings"></div>
+                </div>
+                <div class="mt-8 fs-13 text-secondary">
+                    <span id="themeLabelTextSettings">深色模式</span>
+                </div>
+            </div>
+            <div class="settings-card">
+                <h3><i class="fas fa-cloud"></i> API 配置</h3>
+                <div class="config-group">
+                    <label>API 服务商</label>
+                    <select id="apiProviderSelect">
+                        <option value="deepseek">DeepSeek</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="openrouter">OpenRouter</option>
+                        <option value="groq">Groq</option>
+                        <option value="custom">自定义</option>
+                    </select>
+                </div>
+                <div class="config-group">
+                    <label>API 地址</label>
+                    <input type="text" id="apiUrlInput" placeholder="https://..." value="https://api.deepseek.com/v1/chat/completions">
+                </div>
+                <div class="config-group">
+                    <label>模型</label>
+                    <select id="modelSelect">
+                        <optgroup label="DeepSeek">
+                            <option value="deepseek-chat">DeepSeek Chat</option>
+                            <option value="deepseek-reasoner">DeepSeek Reasoner</option>
+                        </optgroup>
+                        <optgroup label="OpenAI">
+                            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                            <option value="gpt-4o">GPT-4o</option>
+                        </optgroup>
+                        <optgroup label="OpenRouter (免费/收费)">
+                            <option value="google/gemini-2.0-flash-exp:free">Gemini 2.0 Flash (免费)</option>
+                            <option value="meta-llama/llama-3.2-3b-instruct:free">Llama 3.2 3B (免费)</option>
+                            <option value="openai/gpt-3.5-turbo">GPT-3.5 (OpenRouter)</option>
+                        </optgroup>
+                        <optgroup label="Groq">
+                            <option value="llama3-8b-8192">Llama 3 8B</option>
+                            <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
+                        </optgroup>
+                        <optgroup label="其他">
+                            <option value="custom">自定义</option>
+                        </optgroup>
+                    </select>
+                    <input type="text" id="modelInput" placeholder="自定义模型ID" value="deepseek-chat" class="mt-8">
+                </div>
+                <div class="config-group">
+                    <label>API Key</label>
+                    <input type="password" id="apiKeyInput" placeholder="sk-..." autocomplete="off">
+                    <span class="status-badge" id="apiStatus">未设置</span>
+                </div>
+                <div class="flex-gap-12 mt-16">
+                    <button class="btn btn-primary" id="saveConfigBtn"><i class="fas fa-save"></i> 保存配置</button>
+                    <button class="btn btn-secondary" id="testConnectionBtn"><i class="fas fa-vial"></i> 测试连接</button>
+                </div>
+                <div class="info-box">
+                    <i class="fas fa-info-circle"></i> <strong>免费 API 推荐</strong><br>
+                    • DeepSeek：注册送额度，地址 <code>https://api.deepseek.com/v1/chat/completions</code><br>
+                    • Groq：免费，地址 <code>https://api.groq.com/openai/v1/chat/completions</code><br>
+                    • OpenRouter：有免费模型，地址 <code>https://openrouter.ai/api/v1/chat/completions</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- 个人主页视图 -->
+        <div class="profile-view" id="profileView">
+            <div class="profile-banner">
+                <div class="profile-banner-content">
+                    <div class="profile-avatar-large" id="profileAvatarLarge"><i class="fas fa-user"></i></div>
+                    <div class="profile-info">
+                        <h2 id="profileDisplayName">用户</h2>
+                        <p id="profileBioDisplay"><i class="fas fa-quote-left mr-8"></i>在一隅，遇见自己。</p>
+                    </div>
+                    <button class="btn btn-secondary" id="editProfileBtn"><i class="fas fa-pen"></i> 编辑个人资料</button>
+                </div>
+            </div>
+            <div class="profile-content">
+                <div class="empty-state">
+                    <i class="fas fa-tools fs-48 mb-20 opacity-5"></i>
+                    <h3 class="fw-400 mb-8">更多功能开发中</h3>
+                    <p>敬请期待</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 人物管理视图 -->
+        <div class="character-view" id="characterView">
+            <h2 class="mb-20 fw-500"><i class="fas fa-user-tag mr-12"></i>人物设定</h2>
+            <div class="preview-header">
+                <span class="fs-16 fw-500 text-primary"><i class="fas fa-image mr-8"></i>角色卡片预览</span>
+            </div>
+            <div class="character-preview-card" id="characterPreviewCard">
+                <div class="character-preview-bg" id="characterPreviewBg"></div>
+                <div class="character-preview-content">
+                    <div class="character-preview-avatar" id="characterPreviewAvatar"><i class="fas fa-user-astronaut"></i></div>
+                    <div class="character-preview-info">
+                        <h3 id="characterPreviewName">角色名称</h3>
+                        <p id="characterPreviewBio"><i class="fas fa-quote-left mr-8"></i>温柔而冷静的陪伴</p>
+                    </div>
+                    <div class="flex-gap-8">
+                        <button class="btn btn-secondary white-space-nowrap" id="editCharacterAvatarBtn"><i class="fas fa-camera"></i> 头像</button>
+                        <button class="btn btn-secondary white-space-nowrap" id="editCharacterCoverBtn"><i class="fas fa-image"></i> 背景</button>
+                    </div>
+                </div>
+            </div>
+            <div class="settings-card">
+                <h3><i class="fas fa-globe"></i> 世界书 · 世界观</h3>
+                <div class="config-group">
+                    <label>背景设定（不变的世界规则）</label>
+                    <textarea id="worldBookInput" rows="4" placeholder="例如：这是一个魔法与科技并存的近未来世界，人类与精灵共存，但龙族已灭绝千年……"></textarea>
+                </div>
+            </div>
+            <div class="settings-card">
+                <h3><i class="fas fa-id-card"></i> 人物表单</h3>
+                <div class="config-group">
+                    <label>角色姓名 & 名称（空格分隔）</label>
+                    <div class="flex-gap-10">
+                        <input type="text" id="charNameInput" placeholder="姓名（如：林清瑶）" class="flex-1">
+                        <input type="text" id="characterNameInput" placeholder="名称（如：清瑶）" class="flex-1">
+                    </div>
+                </div>
+                <div class="config-group">
+                    <label>个性签名</label>
+                    <input type="text" id="characterBioInput" placeholder="例如：温柔而冷静的陪伴" value="温柔而冷静的陪伴">
+                </div>
+                <div class="config-group">
+                    <label>年龄</label>
+                    <input type="text" id="charAgeInput" placeholder="例如：24">
+                </div>
+                <div class="config-group">
+                    <label>性别</label>
+                    <input type="text" id="charGenderInput" placeholder="例如：女">
+                </div>
+                <div class="config-group">
+                    <label>外貌描写</label>
+                    <textarea id="charAppearanceInput" rows="2" placeholder="例如：黑色长发，常穿素色长裙，眼神清清但偶有温柔"></textarea>
+                </div>
+                <div class="config-group">
+                    <label>人设提示词（基础角色指令）</label>
+                    <textarea id="systemPromptInput" rows="3" placeholder="例如：你是一个冷静又带点青涩的助手，说话简洁但偶尔流露出温柔。"></textarea>
+                </div>
+            </div>
+            <div class="settings-card">
+                <h3><i class="fas fa-smile"></i> 性格</h3>
+                <div class="config-group">
+                    <label>性格描述</label>
+                    <textarea id="charPersonalityInput" rows="3" placeholder="例如：外表冷淡，内心善良，对认可的人会不自觉地关心，说话带点傲娇"></textarea>
+                </div>
+            </div>
+            <div class="settings-card">
+                <h3><i class="fas fa-history"></i> 过往经历</h3>
+                <div class="config-group">
+                    <label>背景故事</label>
+                    <textarea id="charBackstoryInput" rows="4" placeholder="例如：曾是帝国骑士，因不愿服从腐败命令而离开军队，流浪中习得医术……"></textarea>
+                </div>
+            </div>
+            <div class="settings-card">
+                <h3><i class="fas fa-brain"></i> 核心记忆</h3>
+                <div class="config-group">
+                    <label>重要事件/人物关系（每行一条）</label>
+                    <textarea id="charMemoriesInput" rows="3" placeholder="例如：- 师父在临终前将古剑托付给她\n- 曾经救过一个叫阿诺的少年\n- 对甜食没有抵抗力"></textarea>
+                </div>
+                <div id="memoriesCardContainer" class="memory-card-grid mt-12">
+                    <!-- 动态生成记忆卡片 -->
+                </div>
+            </div>
+            <div class="settings-card">
+                <h3><i class="fas fa-comment-dots"></i> 对话风格</h3>
+                <div class="config-group">
+                    <label>风格描述</label>
+                    <textarea id="charStyleInput" rows="2" placeholder="例如：句子简短，偶尔使用「……」，生气时会说「哼」"></textarea>
+                </div>
+                <details class="mt-12" id="styleAdvancedDetails">
+                    <summary class="advanced-summary">高级设置 · 对话示例</summary>
+                    <div class="config-group mt-12">
+                        <label>示例对话（每行一条，格式：用户：xxx \n 角色：xxx）</label>
+                        <textarea id="charExamplesInput" rows="4" placeholder="用户：你好呀\n角色：……你是谁？有什么事吗？\n用户：想和你聊聊\n角色：哼，我很忙的，不过既然你坚持……"></textarea>
+                    </div>
+                    <div id="exampleBubblePreview" class="example-bubble-container">
+                        <!-- 动态生成气泡预览 -->
+                    </div>
+                </details>
+            </div>
+            <div class="flex-gap-12 mt-8 mb-24">
+                <button class="btn btn-primary" id="saveCharacterBtn"><i class="fas fa-save"></i> 保存人物设定</button>
+                <button class="btn btn-secondary" id="resetCharacterBtn"><i class="fas fa-undo-alt"></i> 重置</button>
+            </div>
+        </div>
+
+        <!-- 数据管理视图 -->
+        <div class="data-manager-view" id="dataManagerView">
+            <h2 class="mb-20 fw-500"><i class="fas fa-database mr-12"></i>数据管理</h2>
+            <div class="settings-card">
+                <h3><i class="fas fa-chart-pie"></i> 存储概览</h3>
+                <div class="storage-grid">
+                    <div class="storage-item">
+                        <div class="fs-13 text-secondary">总占用空间</div>
+                        <div class="storage-value" id="totalStorageSize">0 KB</div>
+                    </div>
+                    <div class="storage-item">
+                        <div class="fs-13 text-secondary">存储项数量</div>
+                        <div class="storage-value" id="totalStorageItems">0</div>
+                    </div>
+                </div>
+                <div class="mt-20">
+                    <table class="storage-table">
+                        <tbody id="storageDetailsTable"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="settings-card">
+                <h3><i class="fas fa-exchange-alt"></i> 导入 / 导出</h3>
+                <p class="fs-14 text-secondary mb-20">导出全部数据为 JSON 文件，或从之前导出的文件恢复所有设置。</p>
+                <div class="flex-gap-16 flex-wrap">
+                    <button class="btn btn-primary flex-1" id="exportDataBtn"><i class="fas fa-download"></i> 导出全部数据</button>
+                    <button class="btn btn-secondary flex-1" id="importDataBtn"><i class="fas fa-upload"></i> 导入数据文件</button>
+                    <input type="file" id="importFileInput" accept=".json,application/json" class="hidden">
+                </div>
+                <div class="mt-16 fs-13 text-secondary">
+                    <i class="fas fa-info-circle"></i> 导入数据将覆盖当前所有设置，建议先导出备份。
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 图片裁剪模态框 -->
+    <div class="modal-overlay" id="cropModalOverlay" style="display: none;">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h3>调整图片</h3>
+                <button class="modal-close" id="closeCropModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="crop-container">
+                    <img id="cropImage" src="" alt="裁剪图片">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelCropBtn">取消</button>
+                <button class="btn btn-primary" id="saveCropBtn">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑个人资料模态框 -->
+    <div class="modal-overlay" id="editProfileModalOverlay" style="display: none;">
+        <div class="modal-container w-450">
+            <div class="modal-header">
+                <h3>编辑个人资料</h3>
+                <button class="modal-close" id="closeEditProfileModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="config-group">
+                    <label>显示名称</label>
+                    <input type="text" id="editProfileNameInput" placeholder="你的名字" value="用户">
+                </div>
+                <div class="config-group">
+                    <label>个性签名</label>
+                    <input type="text" id="editProfileBioInput" placeholder="写点什么..." value="在一隅，遇见自己。">
+                </div>
+                <div class="config-group">
+                    <label>头像</label>
+                    <div class="flex-center flex-gap-12">
+                        <button class="btn btn-secondary flex-1" id="editUploadAvatarBtn"><i class="fas fa-camera"></i> 上传头像</button>
+                        <span class="fs-12 opacity-5">1:1</span>
+                    </div>
+                </div>
+                <div class="config-group">
+                    <label>主页背景</label>
+                    <div class="flex-center flex-gap-12">
+                        <button class="btn btn-secondary flex-1" id="editUploadCoverBtn"><i class="fas fa-image"></i> 上传背景图</button>
+                        <span class="fs-12 opacity-5">16:9</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelEditProfileBtn">取消</button>
+                <button class="btn btn-primary" id="saveEditProfileBtn">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 遮罩 + 抽屉 -->
+    <div class="drawer-overlay" id="drawerOverlay"></div>
+    <div class="config-drawer" id="configDrawer">
+        <div class="drawer-header">
+            <h3><i class="fas fa-sliders-h mr-8"></i> 控制中心</h3>
+            <button class="close-drawer" id="closeDrawerBtn"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="drawer-content">
+            <div class="mt-20">
+                <button class="btn btn-warning w-full" id="clearChatBtn"><i class="fas fa-trash-alt"></i> 清空对话记录</button>
+            </div>
+            <div class="fs-12 opacity-5 mt-20 pt-16 bt-1">
+                <i class="fas fa-info-circle"></i> 完整 API 设置请点击左侧齿轮图标。
+            </div>
+        </div>
+    </div>
+
+    <!-- 外部脚本 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    <script src="https://github.com/LatusAmberal/corner/blob/main/js/script.js"></script>
+</body>
+</html>
