@@ -189,9 +189,9 @@ body {
     scroll-behavior: smooth;
 }
 
-.message-row { display: flex; width: 100%; }
+.message-row { display: flex; width: 100%; align-items: flex-end; }
 .message-row.assistant { justify-content: flex-start; }
-.message-row.user { justify-content: flex-end; }
+.message-row.user { justify-content: flex-end; gap: 8px; }
 
 .message-bubble {
     max-width: 70%;
@@ -523,21 +523,20 @@ body {
     transform: scale(1.1);
 }
 
-.read-status-inline {
+.read-status-outside {
     font-size: 10px;
-    margin-left: 6px;
+    margin-bottom: 4px;
     opacity: 0.6;
+    white-space: nowrap;
+    user-select: none;
 }
 
-.read-status-inline.read { color: #0f9960; }
-.read-status-inline.unread { color: #9ab3c0; }
-
-.read-status-inline.read {
+.read-status-outside.read {
     color: var(--accent);
     opacity: 0.9;
 }
 
-.read-status-inline.unread {
+.read-status-outside.unread {
     color: var(--text-secondary);
 }
 
@@ -870,6 +869,26 @@ body {
     font-size: 18px;
     transition: 0.15s;
     flex-shrink: 0;
+}
+
+.batch-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    width: 36px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 18px;
+    transition: 0.15s;
+    flex-shrink: 0;
+}
+
+.batch-btn:hover {
+    color: var(--accent);
+    transform: scale(1.1);
 }
 .send-btn:hover {
     background: var(--accent-hover);
