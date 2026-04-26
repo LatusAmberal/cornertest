@@ -14,7 +14,6 @@
   const overlay = document.getElementById('drawerOverlay');
   const closeDrawerBtn = document.getElementById('closeDrawerBtn');
   const modelInput = document.getElementById('modelInput');
-  const characterNameInput = document.getElementById('characterNameInput');
   const systemPromptInput = document.getElementById('systemPromptInput');
   const testConnectionBtn = document.getElementById('testConnectionBtn');
   const clearChatBtn = document.getElementById('clearChatBtn');
@@ -270,9 +269,7 @@
     modelInput.value = config.model;
     // 加载配置到表单
     if (config.characterName) {
-      const names = config.characterName.split(' ');
-      charNameInput.value = names[0] || '';
-      characterNameInput.value = names[1] || '';
+      charNameInput.value = config.characterName;
     }
     characterBioInput.value = config.characterBio || '';
     charAgeInput.value = config.characterAge || '';
@@ -315,9 +312,7 @@
     config.apiUrl = apiUrlInput.value.trim();
     config.model = modelInput.value.trim();
 
-    const namePart1 = charNameInput.value.trim();
-    const namePart2 = characterNameInput.value.trim();
-    config.characterName = [namePart1, namePart2].filter(Boolean).join(' ') || '青绿角色';
+    config.characterName = charNameInput.value.trim() || '青绿角色';
 
     config.characterBio = characterBioInput.value.trim();
     config.characterAge = charAgeInput.value.trim();
@@ -724,7 +719,7 @@
     try {
       localStorage.setItem('character_data', JSON.stringify(characterData));
       updateCharacterPreview();
-      config.characterName = characterNameInput.value.trim() || '青绿助手';
+      config.characterName = charNameInput.value.trim() || '青绿助手';
       updateChatTitle();
       showToast('人物设定已保存');
     } catch(e) {
@@ -1306,7 +1301,6 @@
       inp.click();
     });
 
-    characterNameInput.addEventListener('input', updateCharacterPreview);
     charNameInput.addEventListener('input', updateCharacterPreview);
     characterBioInput.addEventListener('input', updateCharacterPreview);
     charAgeInput.addEventListener('input', updateCharacterPreview);
