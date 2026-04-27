@@ -1328,6 +1328,12 @@
     if (focusStopBtn) focusStopBtn.disabled = !focusState.user.running;
 
     if (focusAiCard) focusAiCard.style.display = focusState.ai.enabled ? 'block' : 'none';
+    const inviteToggleMain = document.getElementById('inviteToggleMain');
+    if (inviteToggleMain) {
+        inviteToggleMain.classList.toggle('active', focusState.ai.enabled);
+        // 专注运行时禁用开关，结束后自动启用
+        inviteToggleMain.disabled = focusState.user.running || (focusState.ai.enabled && focusState.ai.running);
+    }
     if (focusAiTimerDisplay) focusAiTimerDisplay.textContent = formatCountdown(computeTimerSeconds(focusState.ai));
     if (focusAiActivityDisplay) focusAiActivityDisplay.textContent = focusState.ai.activity || '专注';
   }
@@ -1747,86 +1753,6 @@
         });
     }, 0);
   }
-
-    // 初始化弹窗内容
-    setTimeout(() => {
-        const sel = document.getElementById(activitySelectId);
-        const custom = document.getElementById(activityCustomId);
-        const minsEl = document.getElementById(minutesId);
-        const modeToggle = document.getElementById(modeToggleId);
-        const aiActEl = document.getElementById(aiActivityId);
-        const aiMinEl = document.getElementById(aiMinutesId);
-        const inviteToggle = document.getElementById(inviteToggleId);
-        const aiSettingsContainer = document.getElementById(aiSettingsContainerId);
-
-        const presets = ['学习','阅读','写作','工作','运动','冥想'];
-        const currentActivity = (focusState.user.activity || '').trim();
-        const matched = presets.includes(currentActivity);
-        if (sel) sel.value = matched ? currentActivity : '自定义';
-        if (custom) {
-            custom.classList.toggle('hidden', matched);
-            custom.value = matched ? '' : currentActivity;
-        }
-        if (minsEl) minsEl.value = String(Math.max(1, Math.round((focusState.user.durationSec || 1500) / 60)));
-        if (modeToggle) modeToggle.classList.toggle('active', focusState.user.mode === 'up');
-
-        // 邀请开关状态
-        if (inviteToggle) {
-            inviteToggle.classList.toggle('active', focusState.ai.enabled);
-            if (aiSettingsContainer) {
-                aiSettingsContainer.style.display = focusState.ai.enabled ? 'block' : 'none';
-            }
-            inviteToggle.addEventListener('click', () => {
-                inviteToggle.classList.toggle('active');
-                const enabled = inviteToggle.classList.contains('active');
-                if (aiSettingsContainer) {
-                    aiSettingsContainer.style.display = enabled ? 'block' : 'none';
-                }
-            });
-        }
-
-        const aiSuggestBtn = document.getElementById('aiSuggestBtn');
-        if (aiSuggestBtn) {
-            aiSuggestBtn.addEventListener('click', async () => {
-                const aiActivityInput = document.getElementById(aiActivityId);
-                const aiMinutesInput = document.getElementById(aiMinutesId);
-                if (!aiActivityInput) return;
-                try {
-                    const reply = await callAI(
-                        '请根据你的角色设定，为专注活动推荐一个简短的名称和适当的时长（分钟，范围10-180）。只返回JSON格式：{"activity":"活动名","minutes":数字}',
-                        '你是一个角色扮演AI，只需输出JSON。'
-                    );
-                    const json = JSON.parse(reply.trim());
-                    if (json.activity && typeof json.minutes === 'number') {
-                        aiActivityInput.value = json.activity;
-                        aiMinutesInput.value = Math.max(10, Math.min(180, json.minutes));
-                    }
-                } catch(e) {
-                    aiActivityInput.value = '陪你专注';
-                    aiMinutesInput.value = '25';
-                }
-            });
-        }
-
-        const lock = !!focusState.ai.locked;
-        if (aiActEl) {
-            aiActEl.value = (focusState.ai.activity || '').trim();
-            aiActEl.disabled = lock;
-        }
-        if (aiMinEl) {
-            aiMinEl.value = String(Math.max(1, Math.round((focusState.ai.durationSec || focusState.user.durationSec || 1500) / 60)));
-            aiMinEl.disabled = lock;
-        }
-
-        sel?.addEventListener('change', () => {
-            if (!custom) return;
-            const isCustom = sel.value === '自定义';
-            custom.classList.toggle('hidden', !isCustom);
-            if (isCustom) custom.focus();
-        });
-        modeToggle?.addEventListener('click', () => modeToggle.classList.toggle('active'));
-    }, 0);
-}
 
   // ---------- 通用弹窗逻辑 ----------
   function showCommonDialog({ title = '提示', message = '', customBody = '', confirmText = '确定', cancelText = '取消', showCancel = true, onConfirm = null }) {
