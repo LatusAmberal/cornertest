@@ -1447,18 +1447,7 @@
         focusState.user.startRemainingSec = focusState.user.remainingSec;
     }
 
-    if (focusState.ai.enabled) {
-        // 锁定开关
-        const inviteToggleMain = document.getElementById('inviteToggleMain');
-        if (inviteToggleMain) inviteToggleMain.disabled = true;
-        // 20% 概率被拒绝
-        if (Math.random() < 0.2) {
-            addMessage('assistant', '抱歉，我现在有点事情，没法陪你一起专注……');
-            focusState.ai.running = false;
-        } else {
-            startAiFocusAuto();
-        }
-    }
+    if (focusState.ai.enabled) startAiFocusAuto();
 
     saveFocusState();
     syncFocusUI();
@@ -1479,8 +1468,7 @@
   }
 
   function endUserFocus() {
-    if (!focusState.user.running) return; // 自己没在专注，不做任何事
-    resetUserOnly();  // 仅重置自己，不影响对方
+    resetUserOnly();
   }
 
   function resetUserOnly() {
@@ -1627,6 +1615,7 @@
     const activitySelectId = 'focusActivitySelectModal';
     const activityCustomId = 'focusActivityCustomModal';
     const minutesId = 'focusMinutesModal';
+    const inviteToggleId = 'focusInviteToggleModal';
     const aiActivityId = 'focusAiActivityModal';
     const aiMinutesId = 'focusAiMinutesModal'; // 隐藏的，用于存储时间值
     const aiSuggestedTimeDisplayId = 'aiSuggestedTimeDisplay';
@@ -1652,6 +1641,10 @@
         <label>我的时间（分钟）</label>
         <input type="number" id="${minutesId}" min="1" max="180">
       </div>
+      <div class="theme-toggle-row mt-12">
+        <span class="theme-toggle-label"><i class="fas fa-user-astronaut"></i> 邀请对方加入</span>
+        <div class="apple-toggle" id="${inviteToggleId}"></div>
+      </div>
 
       <!-- 对方专注设置 -->
       <div class="mt-16">
@@ -1676,16 +1669,25 @@
             const sel = document.getElementById(activitySelectId);
             const custom = document.getElementById(activityCustomId);
             const mins = Number(document.getElementById(minutesId)?.value || 25);
+            const inviteToggle = document.getElementById(inviteToggleId);
+            const invited = !!inviteToggle?.classList.contains('active');
             const activity = (sel?.value === '自定义' ? (custom?.value || '') : (sel?.value || '')).trim();
 
             setUserFocusActivity(activity || '专注');
-            setUserFocusMinutes(mins);
+            if (showMinutes) setUserFocusMinutes(mins);
 
             // 保存对方设置
-            const aiActivity = (document.getElementById(aiActivityId)?.value || '').trim();
-            const aiMins = Number(document.getElementById(aiMinutesId)?.value || 25);
-            if (aiActivity) focusState.ai.activity = aiActivity;
-            if (aiMins > 0) focusState.ai.durationSec = Math.round(aiMins * 60);
+            if (!focusState.ai.locked) {
+                focusState.ai.enabled = invited;
+                if (!invited) {
+                    focusState.ai.running = false;
+                    focusState.ai.locked = false;
+                }
+                const aiActivity = (document.getElementById(aiActivityId)?.value || '').trim();
+                const aiMins = Number(document.getElementById(aiMinutesId)?.value || 25);
+                if (aiActivity) focusState.ai.activity = aiActivity;
+                if (aiMins > 0) focusState.ai.durationSec = Math.round(aiMins * 60);
+            }
 
             saveFocusState();
             syncFocusUI();
@@ -1696,6 +1698,7 @@
         const sel = document.getElementById(activitySelectId);
         const custom = document.getElementById(activityCustomId);
         const minsEl = document.getElementById(minutesId);
+        const inviteToggle = document.getElementById(inviteToggleId);
         const aiActEl = document.getElementById(aiActivityId);
         const aiMinEl = document.getElementById(aiMinutesId);
         const aiTimeDisplay = document.getElementById(aiSuggestedTimeDisplayId);
@@ -1711,7 +1714,22 @@
         if (minsEl) minsEl.value = String(Math.max(1, Math.round((focusState.user.durationSec || 1500) / 60)));
 
         // 初始化对方数据
-        if (aiActEl) aiActEl.value = focusState.ai.activity || '';
+        const lock = !!focusState.ai.locked;
+        if (inviteToggle) {
+            inviteToggle.classList.toggle('active', !!focusState.ai.enabled);
+            if (lock) {
+                inviteToggle.style.pointerEvents = 'none';
+                inviteToggle.style.opacity = '0.5';
+            }
+            inviteToggle.addEventListener('click', () => {
+                if (lock) return;
+                inviteToggle.classList.toggle('active');
+            });
+        }
+        if (aiActEl) {
+            aiActEl.value = focusState.ai.activity || '';
+            aiActEl.disabled = lock;
+        }
         if (aiMinEl) aiMinEl.value = focusState.ai.durationSec ? Math.round(focusState.ai.durationSec / 60) : '';
         if (aiTimeDisplay) {
             const mins = focusState.ai.durationSec ? Math.round(focusState.ai.durationSec / 60) : null;
@@ -1721,6 +1739,11 @@
         // AI 建议按钮
         const aiSuggestBtn = document.getElementById('aiSuggestBtn');
         if (aiSuggestBtn) {
+            if (lock) {
+                aiSuggestBtn.disabled = true;
+                aiSuggestBtn.style.opacity = '0.5';
+                aiSuggestBtn.style.pointerEvents = 'none';
+            }
             aiSuggestBtn.addEventListener('click', async () => {
                 const activityInput = document.getElementById(aiActivityId);
                 const timeInput = document.getElementById(aiMinutesId);
@@ -1912,29 +1935,9 @@
       focusModeToggle.classList.toggle('active');
       setUserFocusMode(focusModeToggle.classList.contains('active') ? 'up' : 'down');
     });
-    // 主界面邀请对方开关
-    const inviteToggleMain = document.getElementById('inviteToggleMain');
-    if (inviteToggleMain) {
-        inviteToggleMain.classList.toggle('active', focusState.ai.enabled);
-        inviteToggleMain.addEventListener('click', () => {
-            inviteToggleMain.classList.toggle('active');
-            focusState.ai.enabled = inviteToggleMain.classList.contains('active');
-            // 如果已经锁定（之前开始过专注），不能改变邀请状态？可以根据需求来，这里简单处理：一旦开始专注后不允许修改。
-            // 我们可以在 startUserFocus 中锁定 toggle，这里先不处理。
-            saveFocusState();
-            syncFocusUI();
-        });
-    }
     focusStartBtn?.addEventListener('click', startUserFocus);
     focusStopBtn?.addEventListener('click', stopUserFocus);
-
-    const endAiFocusBtn = document.getElementById('endAiFocusBtn');
-    endAiFocusBtn?.addEventListener('click', endAiFocus);
-    // 将重置按钮改为结束按钮
-    if (focusResetBtn) {
-        focusResetBtn.innerHTML = '<i class="fas fa-stop"></i> 结束';
-        focusResetBtn.addEventListener('click', endUserFocus);
-    }
+    focusResetBtn?.addEventListener('click', resetUserOnly);
 
     saveCharacterBtn.addEventListener('click', saveCharacterToStorage);
     resetCharacterBtn.addEventListener('click', ()=>{
