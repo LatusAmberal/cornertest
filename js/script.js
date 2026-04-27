@@ -13,6 +13,9 @@
   const drawer = document.getElementById('configDrawer');
   const overlay = document.getElementById('drawerOverlay');
   const closeDrawerBtn = document.getElementById('closeDrawerBtn');
+  const sidebar = document.getElementById('sidebar');
+  const sidebarOverlay = document.getElementById('sidebarOverlay');
+  const mobileMenuBtn = document.getElementById('mobileMenuBtn');
   const modelInput = document.getElementById('modelInput');
   const systemPromptInput = document.getElementById('systemPromptInput');
   const testConnectionBtn = document.getElementById('testConnectionBtn');
@@ -382,6 +385,17 @@
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const oneHour = 60 * 60 * 1000;
 
+    const getUserAvatarUrl = () => {
+      try { return localStorage.getItem('user_avatar') || ''; } catch(e) { return ''; }
+    };
+    const getAssistantAvatarUrl = () => characterData?.avatar || '';
+    const buildAvatarHtml = (role) => {
+      const url = role === 'user' ? getUserAvatarUrl() : getAssistantAvatarUrl();
+      if (url) return `<div class="message-avatar ${role}"><img src="${url}" alt=""></div>`;
+      const icon = role === 'user' ? 'fa-user' : 'fa-user-astronaut';
+      return `<div class="message-avatar ${role}"><i class="fas ${icon}"></i></div>`;
+    };
+
     let html = '';
     let lastTimestamp = 0;
     let lastDateKey = '';
@@ -438,9 +452,13 @@
         </div>`;
 
       if (msg.role === 'user' && statusHtml) {
-        html += `<div class="message-row ${msg.role}">${statusHtml}${bubble}</div>`;
+        html += `<div class="message-row ${msg.role}">${statusHtml}${bubble}${buildAvatarHtml('user')}</div>`;
       } else {
-        html += `<div class="message-row ${msg.role}">${bubble}</div>`;
+        if (msg.role === 'assistant') {
+          html += `<div class="message-row assistant">${buildAvatarHtml('assistant')}${bubble}</div>`;
+        } else {
+          html += `<div class="message-row user">${bubble}${buildAvatarHtml('user')}</div>`;
+        }
       }
 
       lastTimestamp = msgTime;
@@ -448,7 +466,7 @@
     });
 
     if (currentTypingMessageId) {
-      html += `<div class="message-row assistant" id="${currentTypingMessageId}"><div class="message-bubble typing-indicator"><span></span><span></span><span></span></div></div>`;
+      html += `<div class="message-row assistant" id="${currentTypingMessageId}">${buildAvatarHtml('assistant')}<div class="message-bubble typing-indicator"><span></span><span></span><span></span></div></div>`;
     }
 
     messagesArea.innerHTML = html;
@@ -823,7 +841,13 @@
         }
 
         const data = await res.json();
-        return data.choices[0].message.content;
+        const choice0 = data?.choices?.[0];
+        const content = choice0?.message?.content ?? choice0?.delta?.content ?? choice0?.text;
+        if (typeof content === 'string') return content;
+        const errPayload = (() => {
+          try { return JSON.stringify(data); } catch(e) { return '[unserializable]'; }
+        })();
+        throw new Error(`API 返回格式异常：缺少内容字段（choices[0].message.content）。返回：${errPayload.slice(0, 800)}`);
     }
 
   // ---------- 聊天偏好辅助函数 ----------
@@ -978,6 +1002,20 @@
   // ---------- 抽屉 ----------
   function openDrawer() { drawer.classList.add('open'); overlay.classList.add('show'); }
   function closeDrawer() { drawer.classList.remove('open'); overlay.classList.remove('show'); }
+
+  function isMobile() { return window.innerWidth <= 768; }
+  function openMobileSidebar() {
+    if (!isMobile()) return;
+    document.body.classList.add('mobile-sidebar-open');
+  }
+  function closeMobileSidebar() {
+    document.body.classList.remove('mobile-sidebar-open');
+  }
+  function toggleMobileSidebar() {
+    if (!isMobile()) return;
+    if (document.body.classList.contains('mobile-sidebar-open')) closeMobileSidebar();
+    else openMobileSidebar();
+  }
 
   // ---------- 预设地址 ----------
   const apiUrlPresets = {
@@ -1266,6 +1304,13 @@
     configBtn.addEventListener('click', openDrawer);
     closeDrawerBtn.addEventListener('click', closeDrawer);
     overlay.addEventListener('click', closeDrawer);
+    mobileMenuBtn?.addEventListener('click', toggleMobileSidebar);
+    sidebarOverlay?.addEventListener('click', closeMobileSidebar);
+    sidebar?.addEventListener('click', (e) => {
+      if (!isMobile()) return;
+      const icon = e.target.closest('.sidebar-icon');
+      if (icon) closeMobileSidebar();
+    });
     saveConfigBtn.addEventListener('click', ()=>{ applyConfig(); closeDrawer(); });
     testConnectionBtn.addEventListener('click', testConnection);
     clearChatBtn.addEventListener('click', ()=>{
