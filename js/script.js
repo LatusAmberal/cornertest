@@ -1470,60 +1470,8 @@
   }
 
   function endUserFocus() {
-    const userRunning = focusState.user.running;
-    const aiRunning = focusState.ai.enabled && focusState.ai.running;
-    if (!userRunning && !aiRunning) return;
-
-    if (userRunning && aiRunning) {
-        showCommonDialog({
-            title: '结束专注',
-            message: '确定要结束自己的专注吗？对方可能仍在专注中。',
-            customBody: `<div class="flex-gap-12 mt-8">
-                <button class="btn btn-secondary" id="endOnlyMeBtn">只结束自己</button>
-                <button class="btn btn-warning" id="endBothBtn">同时结束双方</button>
-            </div>`,
-            showCancel: true,
-            confirmText: '', // 隐藏默认确定按钮
-            onConfirm: null
-        });
-
-        setTimeout(() => {
-            const endOnlyMeBtn = document.getElementById('endOnlyMeBtn');
-            const endBothBtn = document.getElementById('endBothBtn');
-            const close = () => commonDialogOverlay.classList.remove('show');
-
-            endOnlyMeBtn?.addEventListener('click', () => {
-                resetUserOnly(); // 只停止自己
-                close();
-            });
-            endBothBtn?.addEventListener('click', () => {
-                resetUserFocus();
-                close();
-            });
-            dialogCancelBtn.onclick = close;
-        }, 0);
-    } else if (userRunning) {
-        stopUserFocus();
-    } else if (aiRunning) {
-        showCommonDialog({
-            title: '结束对方的专注',
-            message: '确定要结束对方的专注吗？',
-            confirmText: '确定结束',
-            onConfirm: () => {
-                focusState.ai.running = false;
-                focusState.ai.lastStartTs = 0;
-                if (focusState.ai.mode === 'up') {
-                    focusState.ai.elapsedSec = computeUpElapsed(focusState.ai);
-                    focusState.ai.startElapsedSec = focusState.ai.elapsedSec || 0;
-                } else {
-                    focusState.ai.remainingSec = computeDownRemaining(focusState.ai);
-                    focusState.ai.startRemainingSec = focusState.ai.remainingSec;
-                }
-                saveFocusState();
-                syncFocusUI();
-            }
-        });
-    }
+    if (!focusState.user.running) return; // 自己没在专注，不做任何事
+    resetUserOnly();  // 仅重置自己，不影响对方
   }
 
   function resetUserOnly() {
@@ -1542,10 +1490,10 @@
   }
 
   function endAiFocus() {
-    if (!focusState.ai.enabled || !focusState.ai.running) return;
+    if (!focusState.ai.enabled) return;
     focusState.ai.running = false;
     focusState.ai.lastStartTs = 0;
-    // 重置对方计时
+    // 重置计时（无论是否运行，直接归零）
     if (focusState.ai.mode === 'up') {
         focusState.ai.elapsedSec = 0;
         focusState.ai.startElapsedSec = 0;
@@ -1553,7 +1501,8 @@
         focusState.ai.remainingSec = focusState.ai.durationSec;
         focusState.ai.startRemainingSec = focusState.ai.remainingSec;
     }
-    // 保持 enabled 和 locked 不变，以便下次还能邀请
+    focusState.ai.enabled = false;   // 卡片隐藏
+    focusState.ai.locked = false;    // 解锁，下次可重新设置
     saveFocusState();
     syncFocusUI();
   }
