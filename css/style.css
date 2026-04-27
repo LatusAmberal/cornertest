@@ -79,6 +79,7 @@ body {
     box-shadow: none;    /* 去掉阴影 */
     overflow: hidden;
     border: none;        /* 去掉边框 */
+    position: relative;
 }
 
 /* ========= 左侧菜单栏 ========= */
@@ -91,6 +92,16 @@ body {
     padding: 16px 0;
     gap: 12px;
     transition: background 0.2s;
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    z-index: 1600;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease, background 0.2s;
+}
+body.sidebar-open .sidebar {
+    transform: translateX(0);
 }
 
 .sidebar-icon {
@@ -179,7 +190,25 @@ body {
 }
 
 .mobile-only { display: none; }
-.sidebar-overlay { display: none; }
+.sidebar-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 1500;
+    display: none;
+}
+body.sidebar-open .sidebar-overlay {
+    display: block;
+}
+
+.global-menu-btn {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 1700;
+    background: var(--bg-header);
+    border: 1px solid var(--border-light);
+}
 
 /* 消息区 */
 .messages-area {
@@ -1200,35 +1229,7 @@ body.light-theme .profile-banner::before {
     background: rgba(255, 255, 255, 0.75); /*白色模式个人主页蒙版透明度*/
 }
 
-@media (max-width: 768px) {
-    .sidebar {
-        position: fixed;
-        left: 0;
-        top: 0;
-        height: 100vh;
-        z-index: 1600;
-        transform: translateX(-100%);
-        transition: transform 0.2s ease;
-    }
-
-    body.mobile-sidebar-open .sidebar {
-        transform: translateX(0);
-    }
-
-    .sidebar-overlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.55);
-        z-index: 1500;
-    }
-
-    body.mobile-sidebar-open .sidebar-overlay {
-        display: block;
-    }
-
-    .mobile-only {
-        display: flex;
-    }
+@media (max-width: 600px) {
 
     .messages-area {
         padding: 14px 12px 8px;
@@ -1576,10 +1577,18 @@ body.light-theme .character-preview-content .btn-secondary:hover {
 .focus-view {
     flex: 1;
     background: var(--bg-chat-main);
-    padding: 24px 32px;
+    padding: 0;
     overflow-y: auto;
     color: var(--text-primary);
     display: none;
+}
+.focus-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+.focus-view .settings-card {
+    margin: 18px 32px 24px;
 }
 .focus-main {
     display: flex;
@@ -1608,9 +1617,12 @@ body.light-theme .character-preview-content .btn-secondary:hover {
     color: var(--text-primary);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 600px) {
     .focus-view {
-        padding: 18px 14px;
+        padding: 0;
+    }
+    .focus-view .settings-card {
+        margin: 14px 14px 18px;
     }
     .focus-main {
         flex-direction: column;
