@@ -1007,6 +1007,7 @@
 
   function openCropModal(file, type) {
     currentCropType = type;
+    window._cropTarget = 'user';
     const reader = new FileReader();
     reader.onload = (e) => {
       cropImage.src = e.target.result;
@@ -1043,6 +1044,7 @@
   function closeCropModalFunc() {
     cropModalOverlay.classList.remove('show');
     if (cropper) { cropper.destroy(); cropper = null; }
+    window._cropTarget = null;
   }
 
   function saveCroppedImage() {
@@ -1050,7 +1052,8 @@
     const canvas = cropper.getCroppedCanvas();
     const dataURL = canvas.toDataURL('image/jpeg', 0.9);
 
-    if (window._cropTarget === 'character') {
+    const cropTarget = window._cropTarget || 'user';
+    if (cropTarget === 'character') {
       if (currentCropType === 'avatar') characterData.avatar = dataURL;
       else characterData.cover = dataURL;
       updateCharacterPreview();
@@ -1081,18 +1084,6 @@
       fileInput.click();
     });
     document.getElementById('editUploadCoverBtn')?.addEventListener('click', () => {
-      fileInput.onchange = (e) => { const f = e.target.files[0]; if (f) openCropModal(f, 'cover'); fileInput.value = ''; };
-      fileInput.click();
-    });
-
-    // 新增：主页直接上传按钮
-    document.getElementById('directUploadAvatarBtn')?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      fileInput.onchange = (e) => { const f = e.target.files[0]; if (f) openCropModal(f, 'avatar'); fileInput.value = ''; };
-      fileInput.click();
-    });
-    document.getElementById('directUploadCoverBtn')?.addEventListener('click', (e) => {
-      e.stopPropagation();
       fileInput.onchange = (e) => { const f = e.target.files[0]; if (f) openCropModal(f, 'cover'); fileInput.value = ''; };
       fileInput.click();
     });
