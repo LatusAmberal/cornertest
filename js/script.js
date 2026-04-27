@@ -63,9 +63,11 @@
   const focusStartBtn = document.getElementById('focusStartBtn');
   const focusStopBtn = document.getElementById('focusStopBtn');
   const focusResetBtn = document.getElementById('focusResetBtn');
+  const inviteToggleMain = document.getElementById('inviteToggleMain');
   const focusAiCard = document.getElementById('focusAiCard');
   const focusAiTimerDisplay = document.getElementById('focusAiTimerDisplay');
   const focusAiActivityDisplay = document.getElementById('focusAiActivityDisplay');
+  const editAiFocusBtn = document.getElementById('editAiFocusBtn');
 
   const commonDialogOverlay = document.getElementById('commonDialogOverlay');
   const dialogTitle = document.getElementById('dialogTitle');
@@ -1328,12 +1330,13 @@
     if (focusStopBtn) focusStopBtn.disabled = !focusState.user.running;
 
     if (focusAiCard) focusAiCard.style.display = focusState.ai.enabled ? 'block' : 'none';
-    const inviteToggleMain = document.getElementById('inviteToggleMain');
     if (inviteToggleMain) {
         inviteToggleMain.classList.toggle('active', focusState.ai.enabled);
-        // 专注运行时禁用开关，结束后自动启用
-        inviteToggleMain.disabled = focusState.user.running || (focusState.ai.enabled && focusState.ai.running);
+        const disabled = focusState.user.running || (focusState.ai.enabled && focusState.ai.running) || !!focusState.ai.locked;
+        inviteToggleMain.style.pointerEvents = disabled ? 'none' : 'auto';
+        inviteToggleMain.style.opacity = disabled ? '0.5' : '1';
     }
+    if (editAiFocusBtn) editAiFocusBtn.style.display = (focusState.ai.enabled && !focusState.ai.locked) ? 'inline-flex' : 'none';
     if (focusAiTimerDisplay) focusAiTimerDisplay.textContent = formatCountdown(computeTimerSeconds(focusState.ai));
     if (focusAiActivityDisplay) focusAiActivityDisplay.textContent = focusState.ai.activity || '专注';
   }
@@ -1615,10 +1618,6 @@
     const activitySelectId = 'focusActivitySelectModal';
     const activityCustomId = 'focusActivityCustomModal';
     const minutesId = 'focusMinutesModal';
-    const inviteToggleId = 'focusInviteToggleModal';
-    const aiActivityId = 'focusAiActivityModal';
-    const aiMinutesId = 'focusAiMinutesModal'; // 隐藏的，用于存储时间值
-    const aiSuggestedTimeDisplayId = 'aiSuggestedTimeDisplay';
 
     // 根据正计时/倒计时决定是否显示时间设置
     const showMinutes = focusState.user.mode !== 'up';
@@ -1641,24 +1640,7 @@
         <label>我的时间（分钟）</label>
         <input type="number" id="${minutesId}" min="1" max="180">
       </div>
-      <div class="theme-toggle-row mt-12">
-        <span class="theme-toggle-label"><i class="fas fa-user-astronaut"></i> 邀请对方加入</span>
-        <div class="apple-toggle" id="${inviteToggleId}"></div>
-      </div>
-
-      <!-- 对方专注设置 -->
-      <div class="mt-16">
-        <label style="font-weight:600;"><i class="fas fa-user-astronaut"></i> 对方专注</label>
-        <div class="config-group mt-8">
-          <label>对方活动（AI建议或手动修改）</label>
-          <input type="text" id="${aiActivityId}" placeholder="例如：陪你专注 / 看书 / 写作">
-          <button class="btn btn-sm btn-secondary mt-8" id="aiSuggestBtn" type="button"><i class="fas fa-magic"></i> AI 建议</button>
-        </div>
-        <div class="mt-8 fs-13 text-secondary" id="${aiSuggestedTimeDisplayId}">
-          对方预计时长：未设置
-        </div>
-        <input type="hidden" id="${aiMinutesId}" value=""> <!-- 隐藏存储分钟数 -->
-      </div>
+      <div class="mt-8 fs-13 text-secondary">对方专注请在主界面“邀请对方一起”中设置。</div>
     `;
 
     showCommonDialog({
@@ -1669,25 +1651,10 @@
             const sel = document.getElementById(activitySelectId);
             const custom = document.getElementById(activityCustomId);
             const mins = Number(document.getElementById(minutesId)?.value || 25);
-            const inviteToggle = document.getElementById(inviteToggleId);
-            const invited = !!inviteToggle?.classList.contains('active');
             const activity = (sel?.value === '自定义' ? (custom?.value || '') : (sel?.value || '')).trim();
 
             setUserFocusActivity(activity || '专注');
             if (showMinutes) setUserFocusMinutes(mins);
-
-            // 保存对方设置
-            if (!focusState.ai.locked) {
-                focusState.ai.enabled = invited;
-                if (!invited) {
-                    focusState.ai.running = false;
-                    focusState.ai.locked = false;
-                }
-                const aiActivity = (document.getElementById(aiActivityId)?.value || '').trim();
-                const aiMins = Number(document.getElementById(aiMinutesId)?.value || 25);
-                if (aiActivity) focusState.ai.activity = aiActivity;
-                if (aiMins > 0) focusState.ai.durationSec = Math.round(aiMins * 60);
-            }
 
             saveFocusState();
             syncFocusUI();
@@ -1698,10 +1665,6 @@
         const sel = document.getElementById(activitySelectId);
         const custom = document.getElementById(activityCustomId);
         const minsEl = document.getElementById(minutesId);
-        const inviteToggle = document.getElementById(inviteToggleId);
-        const aiActEl = document.getElementById(aiActivityId);
-        const aiMinEl = document.getElementById(aiMinutesId);
-        const aiTimeDisplay = document.getElementById(aiSuggestedTimeDisplayId);
 
         const presets = ['学习','阅读','写作','工作','运动','冥想'];
         const currentActivity = (focusState.user.activity || '').trim();
@@ -1713,67 +1676,113 @@
         }
         if (minsEl) minsEl.value = String(Math.max(1, Math.round((focusState.user.durationSec || 1500) / 60)));
 
-        // 初始化对方数据
-        const lock = !!focusState.ai.locked;
-        if (inviteToggle) {
-            inviteToggle.classList.toggle('active', !!focusState.ai.enabled);
-            if (lock) {
-                inviteToggle.style.pointerEvents = 'none';
-                inviteToggle.style.opacity = '0.5';
-            }
-            inviteToggle.addEventListener('click', () => {
-                if (lock) return;
-                inviteToggle.classList.toggle('active');
-            });
-        }
-        if (aiActEl) {
-            aiActEl.value = focusState.ai.activity || '';
-            aiActEl.disabled = lock;
-        }
-        if (aiMinEl) aiMinEl.value = focusState.ai.durationSec ? Math.round(focusState.ai.durationSec / 60) : '';
-        if (aiTimeDisplay) {
-            const mins = focusState.ai.durationSec ? Math.round(focusState.ai.durationSec / 60) : null;
-            aiTimeDisplay.textContent = mins ? `对方预计时长：${mins} 分钟` : '对方预计时长：未设置';
-        }
-
-        // AI 建议按钮
-        const aiSuggestBtn = document.getElementById('aiSuggestBtn');
-        if (aiSuggestBtn) {
-            if (lock) {
-                aiSuggestBtn.disabled = true;
-                aiSuggestBtn.style.opacity = '0.5';
-                aiSuggestBtn.style.pointerEvents = 'none';
-            }
-            aiSuggestBtn.addEventListener('click', async () => {
-                const activityInput = document.getElementById(aiActivityId);
-                const timeInput = document.getElementById(aiMinutesId);
-                const timeDisplay = document.getElementById(aiSuggestedTimeDisplayId);
-                if (!activityInput) return;
-
-                activityInput.value = '生成中…';
-                activityInput.disabled = true;
-                try {
-                    const result = await generateAiFocusActivity();
-                    if (result) {
-                        activityInput.value = result.activity;
-                        timeInput.value = result.minutes;
-                        if (timeDisplay) timeDisplay.textContent = `对方预计时长：${result.minutes} 分钟`;
-                    }
-                } catch(e) {
-                    activityInput.value = '陪你专注';
-                    timeInput.value = '25';
-                    if (timeDisplay) timeDisplay.textContent = '对方预计时长：25 分钟';
-                }
-                activityInput.disabled = false;
-            });
-        }
-
         sel?.addEventListener('change', () => {
             if (!custom) return;
             const isCustom = sel.value === '自定义';
             custom.classList.toggle('hidden', !isCustom);
             if (isCustom) custom.focus();
         });
+    }, 0);
+  }
+
+  function openAiInviteDialog({ autoGenerate = false, onCancel = null } = {}) {
+    const aiActivityId = 'aiInviteActivityInput';
+    const aiMinutesId = 'aiInviteMinutesInput';
+    const aiSuggestedTimeDisplayId = 'aiInviteTimeDisplay';
+    const aiSuggestBtnId = 'aiInviteSuggestBtn';
+
+    const body = `
+      <div class="config-group">
+        <label>对方活动（可手动修改）</label>
+        <input type="text" id="${aiActivityId}" placeholder="例如：陪你专注 / 看书 / 写作">
+        <button class="btn btn-sm btn-secondary mt-8" id="${aiSuggestBtnId}" type="button"><i class="fas fa-magic"></i> AI 生成</button>
+      </div>
+      <div class="config-group">
+        <label>对方时间（分钟）</label>
+        <input type="number" id="${aiMinutesId}" min="1" max="180">
+      </div>
+      <div class="mt-8 fs-13 text-secondary" id="${aiSuggestedTimeDisplayId}">对方预计时长：未设置</div>
+    `;
+
+    showCommonDialog({
+      title: '对方专注',
+      customBody: body,
+      confirmText: '确认',
+      onConfirm: () => {
+        const aiActivity = (document.getElementById(aiActivityId)?.value || '').trim() || '陪你专注';
+        const aiMinsRaw = Number(document.getElementById(aiMinutesId)?.value || 25);
+        const aiMins = Math.max(1, Math.min(180, aiMinsRaw || 25));
+
+        focusState.ai.enabled = true;
+        focusState.ai.locked = false;
+        focusState.ai.running = false;
+        focusState.ai.lastStartTs = 0;
+        focusState.ai.mode = focusState.user.mode;
+        focusState.ai.activity = aiActivity;
+        focusState.ai.durationSec = Math.round(aiMins * 60);
+        if (focusState.ai.mode === 'up') {
+          focusState.ai.elapsedSec = 0;
+          focusState.ai.startElapsedSec = 0;
+        } else {
+          focusState.ai.remainingSec = focusState.ai.durationSec;
+          focusState.ai.startRemainingSec = focusState.ai.remainingSec;
+        }
+
+        saveFocusState();
+        syncFocusUI();
+      }
+    });
+
+    const closeAndCancel = () => {
+      commonDialogOverlay.classList.remove('show');
+      if (onCancel) onCancel();
+    };
+    dialogCancelBtn.onclick = closeAndCancel;
+    closeCommonDialog.onclick = closeAndCancel;
+    commonDialogOverlay.onclick = (e) => { if (e.target === commonDialogOverlay) closeAndCancel(); };
+
+    setTimeout(() => {
+      const actEl = document.getElementById(aiActivityId);
+      const minsEl = document.getElementById(aiMinutesId);
+      const timeDisplay = document.getElementById(aiSuggestedTimeDisplayId);
+      const suggestBtn = document.getElementById(aiSuggestBtnId);
+
+      if (actEl) actEl.value = (focusState.ai.activity || '').trim();
+      if (minsEl) minsEl.value = String(Math.max(1, Math.round((focusState.ai.durationSec || 1500) / 60)));
+      if (timeDisplay) {
+        const mins = focusState.ai.durationSec ? Math.round(focusState.ai.durationSec / 60) : null;
+        timeDisplay.textContent = mins ? `对方预计时长：${mins} 分钟` : '对方预计时长：未设置';
+      }
+
+      const runSuggest = async () => {
+        if (!actEl || !minsEl) return;
+        if (suggestBtn) suggestBtn.disabled = true;
+        actEl.disabled = true;
+        const oldVal = actEl.value;
+        actEl.value = '生成中…';
+        try {
+          const result = await generateAiFocusActivity();
+          if (result) {
+            actEl.value = result.activity;
+            minsEl.value = String(result.minutes);
+            if (timeDisplay) timeDisplay.textContent = `对方预计时长：${result.minutes} 分钟`;
+          } else {
+            actEl.value = oldVal || '陪你专注';
+          }
+        } catch (e) {
+          actEl.value = oldVal || '陪你专注';
+          minsEl.value = '25';
+          if (timeDisplay) timeDisplay.textContent = '对方预计时长：25 分钟';
+        } finally {
+          actEl.disabled = false;
+          if (suggestBtn) suggestBtn.disabled = false;
+        }
+      };
+
+      if (suggestBtn) suggestBtn.addEventListener('click', runSuggest);
+
+      const shouldAuto = autoGenerate || !(focusState.ai.activity || '').trim() || !focusState.ai.durationSec;
+      if (shouldAuto) runSuggest();
     }, 0);
   }
 
@@ -1938,6 +1947,34 @@
     focusStartBtn?.addEventListener('click', startUserFocus);
     focusStopBtn?.addEventListener('click', stopUserFocus);
     focusResetBtn?.addEventListener('click', resetUserOnly);
+    inviteToggleMain?.addEventListener('click', () => {
+      const enabling = !focusState.ai.enabled;
+      if (!enabling) {
+        focusState.ai.enabled = false;
+        focusState.ai.running = false;
+        focusState.ai.locked = false;
+        saveFocusState();
+        syncFocusUI();
+        return;
+      }
+
+      inviteToggleMain.classList.add('active');
+      openAiInviteDialog({
+        autoGenerate: true,
+        onCancel: () => {
+          inviteToggleMain.classList.remove('active');
+          focusState.ai.enabled = false;
+          focusState.ai.running = false;
+          focusState.ai.locked = false;
+          saveFocusState();
+          syncFocusUI();
+        }
+      });
+    });
+    editAiFocusBtn?.addEventListener('click', () => {
+      if (!focusState.ai.enabled || focusState.ai.locked) return;
+      openAiInviteDialog({ autoGenerate: false });
+    });
 
     saveCharacterBtn.addEventListener('click', saveCharacterToStorage);
     resetCharacterBtn.addEventListener('click', ()=>{
