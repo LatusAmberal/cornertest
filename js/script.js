@@ -290,7 +290,7 @@
     setVal(apiKeyInput, config.apiKey || '');
     setVal(apiUrlInput, config.apiUrl);
     setVal(modelInput, config.model);
-    
+
     // 加载配置到表单
     if (config.characterName) {
       setVal(charNameInput, config.characterName);
@@ -359,7 +359,7 @@
     const provider = apiProviderSelect.value;
     const optgroups = modelSelect.querySelectorAll('optgroup');
     optgroups.forEach(group => {
-      if (group.label.toLowerCase().includes(provider.toLowerCase()) || 
+      if (group.label.toLowerCase().includes(provider.toLowerCase()) ||
           (provider === 'custom' && group.label === '其他')) {
         group.style.display = '';
       } else {
@@ -525,7 +525,7 @@
     charMemoriesInput.value = currentMemories + newMemory;
     updateMemoriesCards();
     saveCharacterToStorage();
-    
+
     showCommonDialog({
       title: '收藏成功',
       message: '已将该消息内容收藏至核心记忆！',
@@ -538,7 +538,7 @@
     const msg = messages[index];
     const inputId = 'editMessageInput_' + index;
     const customBody = `<textarea id="${inputId}" class="w-full mt-10" rows="5" style="padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--bg-side); color:var(--text-main);">${msg.content}</textarea>`;
-    
+
     showCommonDialog({
       title: '修改消息',
       customBody: customBody,
@@ -639,7 +639,7 @@
       const saved = localStorage.getItem('character_data');
       if (saved) characterData = { ...characterData, ...JSON.parse(saved) };
     } catch(e) {}
-    
+
     const setVal = (el, val) => { if (el) el.value = val; };
 
     setVal(worldBookInput, characterData.worldBook || '');
@@ -653,7 +653,7 @@
     setVal(charStyleInput, characterData.style || '');
     setVal(charExamplesInput, characterData.examples || '');
     setVal(characterBioInput, characterData.bio || '温柔而冷静的陪伴');
-    
+
     updateCharacterPreview();
     updateMemoriesCards();
     updateExampleBubbles();
@@ -1400,7 +1400,9 @@
       if (rem <= 0) focusState.user.remainingSec = focusState.user.durationSec;
       focusState.user.startRemainingSec = focusState.user.remainingSec;
     }
-    startAiFocusAuto();
+    if (focusState.ai.enabled) {
+        startAiFocusAuto();
+    }
     saveFocusState();
     syncFocusUI();
     ensureFocusTicker();
@@ -1470,6 +1472,8 @@
     const modeToggleId = 'focusModeToggleModal';
     const aiActivityId = 'focusAiActivityModal';
     const aiMinutesId = 'focusAiMinutesModal';
+    const inviteToggleId = 'inviteToggle';
+    const aiSettingsContainerId = 'focusAiSettingsContainer';
 
     const body = `
       <div class="config-group">
@@ -1493,83 +1497,119 @@
         <span class="theme-toggle-label"><i class="fas fa-stopwatch"></i> 倒计时 / 正计时</span>
         <div class="apple-toggle" id="${modeToggleId}"></div>
       </div>
-      <div class="config-group mt-16">
-        <label>对方活动（开始后不可修改）</label>
-        <input type="text" id="${aiActivityId}" placeholder="例如：陪你专注 / 看书 / 写作">
+
+      <div class="theme-toggle-row">
+        <span class="theme-toggle-label"><i class="fas fa-user-friends"></i> 邀请对方一起</span>
+        <div class="apple-toggle" id="${inviteToggleId}"></div>
       </div>
-      <div class="config-group">
-        <label>对方时间（分钟，开始后不可修改）</label>
-        <input type="number" id="${aiMinutesId}" min="1" max="999">
+
+      <div id="${aiSettingsContainerId}" style="display:none;">
+        <div class="config-group mt-16">
+          <label>对方活动（开始后不可修改）</label>
+          <input type="text" id="${aiActivityId}" placeholder="例如：陪你专注 / 看书 / 写作">
+        </div>
+        <div class="config-group">
+          <label>对方时间（分钟，开始后不可修改）</label>
+          <input type="number" id="${aiMinutesId}" min="1" max="999">
+        </div>
+        <div class="fs-13 text-secondary mt-8">对方会在你开始专注后自动开始，之后不受你控制。</div>
       </div>
-      <div class="fs-13 text-secondary mt-8">对方会在你开始专注后自动开始，之后不受你控制。</div>
     `;
 
     showCommonDialog({
-      title: '选择专注活动',
-      customBody: body,
-      confirmText: '保存',
-      onConfirm: () => {
-        const sel = document.getElementById(activitySelectId);
-        const custom = document.getElementById(activityCustomId);
-        const mins = Number(document.getElementById(minutesId)?.value || 25);
-        const modeToggle = document.getElementById(modeToggleId);
-        const isUp = !!modeToggle?.classList.contains('active');
-        const activity = (sel?.value === '自定义' ? (custom?.value || '') : (sel?.value || '')).trim();
+        title: '选择专注活动',
+        customBody: body,
+        confirmText: '保存',
+        onConfirm: () => {
+            const sel = document.getElementById(activitySelectId);
+            const custom = document.getElementById(activityCustomId);
+            const mins = Number(document.getElementById(minutesId)?.value || 25);
+            const modeToggle = document.getElementById(modeToggleId);
+            const isUp = !!modeToggle?.classList.contains('active');
+            const activity = (sel?.value === '自定义' ? (custom?.value || '') : (sel?.value || '')).trim();
+            const inviteToggle = document.getElementById(inviteToggleId);
+            const inviteEnabled = inviteToggle?.classList.contains('active') ?? false;
 
-        setUserFocusActivity(activity || '专注');
-        setUserFocusMinutes(mins);
-        setUserFocusMode(isUp ? 'up' : 'down');
+            setUserFocusActivity(activity || '专注');
+            setUserFocusMinutes(mins);
+            setUserFocusMode(isUp ? 'up' : 'down');
 
-        if (!focusState.ai.locked) {
-          const aiActivity = (document.getElementById(aiActivityId)?.value || '').trim();
-          const aiMins = Math.max(1, Math.min(999, Number(document.getElementById(aiMinutesId)?.value || mins)));
-          focusState.ai.activity = aiActivity || `陪你一起${focusState.user.activity || '专注'}`;
-          focusState.ai.durationSec = Math.round(aiMins * 60);
+            if (inviteEnabled) {
+                focusState.ai.enabled = true;
+                if (!focusState.ai.locked) {
+                    const aiActivity = (document.getElementById(aiActivityId)?.value || '').trim();
+                    const aiMins = Math.max(1, Math.min(999, Number(document.getElementById(aiMinutesId)?.value || mins)));
+                    focusState.ai.activity = aiActivity || `陪你一起${focusState.user.activity || '专注'}`;
+                    focusState.ai.durationSec = Math.round(aiMins * 60);
+                }
+            } else {
+                focusState.ai.enabled = false;
+                // 如果之前对方未锁定，可以清空设置（保持界面整洁）
+                focusState.ai.activity = '';
+                focusState.ai.durationSec = 0;
+            }
+
+            saveFocusState();
+            syncFocusUI();
         }
-
-        saveFocusState();
-        syncFocusUI();
-      }
     });
 
+    // 初始化弹窗内容
     setTimeout(() => {
-      const sel = document.getElementById(activitySelectId);
-      const custom = document.getElementById(activityCustomId);
-      const minsEl = document.getElementById(minutesId);
-      const modeToggle = document.getElementById(modeToggleId);
-      const aiActEl = document.getElementById(aiActivityId);
-      const aiMinEl = document.getElementById(aiMinutesId);
+        const sel = document.getElementById(activitySelectId);
+        const custom = document.getElementById(activityCustomId);
+        const minsEl = document.getElementById(minutesId);
+        const modeToggle = document.getElementById(modeToggleId);
+        const aiActEl = document.getElementById(aiActivityId);
+        const aiMinEl = document.getElementById(aiMinutesId);
+        const inviteToggle = document.getElementById(inviteToggleId);
+        const aiSettingsContainer = document.getElementById(aiSettingsContainerId);
 
-      const presets = ['学习','阅读','写作','工作','运动','冥想'];
-      const currentActivity = (focusState.user.activity || '').trim();
-      const matched = presets.includes(currentActivity);
-      if (sel) sel.value = matched ? currentActivity : '自定义';
-      if (custom) {
-        custom.classList.toggle('hidden', matched);
-        custom.value = matched ? '' : currentActivity;
-      }
-      if (minsEl) minsEl.value = String(Math.max(1, Math.round((focusState.user.durationSec || 1500) / 60)));
-      if (modeToggle) modeToggle.classList.toggle('active', focusState.user.mode === 'up');
+        const presets = ['学习','阅读','写作','工作','运动','冥想'];
+        const currentActivity = (focusState.user.activity || '').trim();
+        const matched = presets.includes(currentActivity);
+        if (sel) sel.value = matched ? currentActivity : '自定义';
+        if (custom) {
+            custom.classList.toggle('hidden', matched);
+            custom.value = matched ? '' : currentActivity;
+        }
+        if (minsEl) minsEl.value = String(Math.max(1, Math.round((focusState.user.durationSec || 1500) / 60)));
+        if (modeToggle) modeToggle.classList.toggle('active', focusState.user.mode === 'up');
 
-      const lock = !!focusState.ai.locked;
-      if (aiActEl) {
-        aiActEl.value = (focusState.ai.activity || '').trim();
-        aiActEl.disabled = lock;
-      }
-      if (aiMinEl) {
-        aiMinEl.value = String(Math.max(1, Math.round((focusState.ai.durationSec || focusState.user.durationSec || 1500) / 60)));
-        aiMinEl.disabled = lock;
-      }
+        // 邀请开关状态
+        if (inviteToggle) {
+            inviteToggle.classList.toggle('active', focusState.ai.enabled);
+            if (aiSettingsContainer) {
+                aiSettingsContainer.style.display = focusState.ai.enabled ? 'block' : 'none';
+            }
+            inviteToggle.addEventListener('click', () => {
+                inviteToggle.classList.toggle('active');
+                const enabled = inviteToggle.classList.contains('active');
+                if (aiSettingsContainer) {
+                    aiSettingsContainer.style.display = enabled ? 'block' : 'none';
+                }
+            });
+        }
 
-      sel?.addEventListener('change', () => {
-        if (!custom) return;
-        const isCustom = sel.value === '自定义';
-        custom.classList.toggle('hidden', !isCustom);
-        if (isCustom) custom.focus();
-      });
-      modeToggle?.addEventListener('click', () => modeToggle.classList.toggle('active'));
+        const lock = !!focusState.ai.locked;
+        if (aiActEl) {
+            aiActEl.value = (focusState.ai.activity || '').trim();
+            aiActEl.disabled = lock;
+        }
+        if (aiMinEl) {
+            aiMinEl.value = String(Math.max(1, Math.round((focusState.ai.durationSec || focusState.user.durationSec || 1500) / 60)));
+            aiMinEl.disabled = lock;
+        }
+
+        sel?.addEventListener('change', () => {
+            if (!custom) return;
+            const isCustom = sel.value === '自定义';
+            custom.classList.toggle('hidden', !isCustom);
+            if (isCustom) custom.focus();
+        });
+        modeToggle?.addEventListener('click', () => modeToggle.classList.toggle('active'));
     }, 0);
-  }
+}
 
   // ---------- 通用弹窗逻辑 ----------
   function showCommonDialog({ title = '提示', message = '', customBody = '', confirmText = '确定', cancelText = '取消', showCancel = true, onConfirm = null }) {
@@ -1812,14 +1852,14 @@
       }
     };
 
-    batchSendBtn?.addEventListener('click', () => { 
-      batchSendModalOverlay.classList.add('show'); 
-      batchMessageInput.focus(); 
+    batchSendBtn?.addEventListener('click', () => {
+      batchSendModalOverlay.classList.add('show');
+      batchMessageInput.focus();
     });
     closeBatchSendModal?.addEventListener('click', closeBatchModal);
     cancelBatchSendBtn?.addEventListener('click', closeBatchModal);
-    batchSendModalOverlay?.addEventListener('click', (e) => { 
-      if(e.target === batchSendModalOverlay) closeBatchModal(); 
+    batchSendModalOverlay?.addEventListener('click', (e) => {
+      if(e.target === batchSendModalOverlay) closeBatchModal();
     });
     confirmBatchSendBtn?.addEventListener('click', handleBatchSend);
   }
