@@ -15,7 +15,7 @@
   const closeDrawerBtn = document.getElementById('closeDrawerBtn');
   const sidebar = document.getElementById('sidebar');
   const sidebarOverlay = document.getElementById('sidebarOverlay');
-  const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+  const globalMenuBtn = document.getElementById('globalMenuBtn');
   const modelInput = document.getElementById('modelInput');
   const systemPromptInput = document.getElementById('systemPromptInput');
   const testConnectionBtn = document.getElementById('testConnectionBtn');
@@ -58,7 +58,6 @@
   const focusIcon = document.getElementById('focusIcon');
   const focusUserTimerDisplay = document.getElementById('focusUserTimerDisplay');
   const focusUserActivityDisplay = document.getElementById('focusUserActivityDisplay');
-  const focusMenuBtn = document.getElementById('focusMenuBtn');
   const focusModeToggle = document.getElementById('focusModeToggle');
   const focusSettingsBtn = document.getElementById('focusSettingsBtn');
   const focusStartBtn = document.getElementById('focusStartBtn');
@@ -1021,18 +1020,15 @@
   function openDrawer() { drawer.classList.add('open'); overlay.classList.add('show'); }
   function closeDrawer() { drawer.classList.remove('open'); overlay.classList.remove('show'); }
 
-  function isMobile() { return window.innerWidth <= 600; }
-  function openMobileSidebar() {
-    if (!isMobile()) return;
-    document.body.classList.add('mobile-sidebar-open');
+  function openSidebar() {
+    document.body.classList.add('sidebar-open');
   }
-  function closeMobileSidebar() {
-    document.body.classList.remove('mobile-sidebar-open');
+  function closeSidebar() {
+    document.body.classList.remove('sidebar-open');
   }
-  function toggleMobileSidebar() {
-    if (!isMobile()) return;
-    if (document.body.classList.contains('mobile-sidebar-open')) closeMobileSidebar();
-    else openMobileSidebar();
+  function toggleSidebar() {
+    if (document.body.classList.contains('sidebar-open')) closeSidebar();
+    else openSidebar();
   }
 
   // ---------- 预设地址 ----------
@@ -1698,12 +1694,12 @@
     configBtn.addEventListener('click', openDrawer);
     closeDrawerBtn.addEventListener('click', closeDrawer);
     overlay.addEventListener('click', closeDrawer);
-    mobileMenuBtn?.addEventListener('click', toggleMobileSidebar);
-    sidebarOverlay?.addEventListener('click', closeMobileSidebar);
+    globalMenuBtn?.addEventListener('click', toggleSidebar);
+    sidebarOverlay?.addEventListener('click', closeSidebar);
     sidebar?.addEventListener('click', (e) => {
-      if (!isMobile()) return;
       const icon = e.target.closest('.sidebar-icon');
-      if (icon) closeMobileSidebar();
+      const avatar = e.target.closest('#userAvatarBtn');
+      if (icon || avatar) closeSidebar();
     });
     saveConfigBtn.addEventListener('click', ()=>{ applyConfig(); closeDrawer(); });
     testConnectionBtn.addEventListener('click', testConnection);
@@ -1728,7 +1724,6 @@
     characterIcon.addEventListener('click', ()=>setActiveView('character'));
     dataManagerIcon.addEventListener('click', ()=>setActiveView('data'));
 
-    focusMenuBtn?.addEventListener('click', toggleMobileSidebar);
     focusSettingsBtn?.addEventListener('click', openFocusSettingsDialog);
     focusModeToggle?.addEventListener('click', () => {
       focusModeToggle.classList.toggle('active');
