@@ -192,7 +192,7 @@ body {
     scroll-behavior: smooth;
 }
 
-.message-row { display: flex; width: 100%; align-items: flex-end; gap: 8px; }
+.message-row { display: flex; width: 100%; align-items: flex-start; gap: 8px; }
 .message-row.assistant { justify-content: flex-start; }
 .message-row.user { justify-content: flex-end; }
 
@@ -1540,17 +1540,30 @@ body.light-theme .character-preview-content .btn-secondary:hover {
 }
 .chat-main.character-hidden .chat-view,
 .chat-main.character-hidden .settings-view,
-.chat-main.character-hidden .profile-view {
+.chat-main.character-hidden .profile-view,
+.chat-main.character-hidden .focus-view {
     display: none;
 }
 .chat-main.character-hidden .character-view {
+    display: block;
+}
+/* 专注视图显示控制 */
+.chat-main.focus-hidden .chat-view,
+.chat-main.focus-hidden .settings-view,
+.chat-main.focus-hidden .profile-view,
+.chat-main.focus-hidden .character-view,
+.chat-main.focus-hidden .data-manager-view {
+    display: none;
+}
+.chat-main.focus-hidden .focus-view {
     display: block;
 }
         /* 数据管理视图显示控制 */
 .chat-main.data-hidden .chat-view,
 .chat-main.data-hidden .settings-view,
 .chat-main.data-hidden .profile-view,
-.chat-main.data-hidden .character-view {
+.chat-main.data-hidden .character-view,
+.chat-main.data-hidden .focus-view {
     display: none;
 }
 .chat-main.data-hidden .data-manager-view {
@@ -1558,6 +1571,55 @@ body.light-theme .character-preview-content .btn-secondary:hover {
 }
 .data-manager-view {
     display: none;
+}
+
+.focus-view {
+    flex: 1;
+    background: var(--bg-chat-main);
+    padding: 24px 32px;
+    overflow-y: auto;
+    color: var(--text-primary);
+    display: none;
+}
+.focus-main {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+}
+.focus-timer {
+    font-size: 44px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 16px 18px;
+    border-radius: 14px;
+    background: var(--bg-header);
+    border: 1px solid var(--border-light);
+    min-width: 160px;
+    text-align: center;
+    color: var(--text-primary);
+}
+.focus-meta {
+    flex: 1;
+    min-width: 0;
+}
+.focus-activity {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+    .focus-view {
+        padding: 18px 14px;
+    }
+    .focus-main {
+        flex-direction: column;
+        gap: 14px;
+    }
+    .focus-timer {
+        width: 100%;
+        min-width: 0;
+    }
 }
 
 #cropModalOverlay {
