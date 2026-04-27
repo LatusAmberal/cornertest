@@ -355,6 +355,98 @@ body.sidebar-open .sidebar-overlay {
 .storage-table td {
     padding: 10px 0;
 }
+
+/* ===== 危险操作区域 ===== */
+.danger-zone {
+    border-color: rgba(176, 46, 46, 0.25) !important;
+}
+.danger-zone h3 {
+    color: #e05555;
+}
+.danger-zone h3 i { color: #e05555; }
+
+/* 危险按钮（描边版） */
+.btn-danger-outline {
+    background: transparent;
+    border: 1.5px solid #e05555;
+    color: #e05555;
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+.btn-danger-outline:hover {
+    background: rgba(176, 46, 46, 0.1);
+    color: #e05555;
+}
+.btn-danger-outline:active {
+    background: rgba(176, 46, 46, 0.2);
+}
+
+/* 确认清除弹窗 */
+.clear-confirm-modal .modal-container {
+    max-width: 420px;
+}
+.clear-confirm-icon {
+    text-align: center;
+    font-size: 48px;
+    color: #e05555;
+    margin-bottom: 12px;
+}
+.clear-confirm-text {
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 20px;
+}
+.clear-confirm-text strong {
+    color: #e05555;
+}
+.modal-input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1.5px solid var(--border-strong);
+    border-radius: 10px;
+    background: var(--bg-header);
+    color: var(--text-primary);
+    font-size: 14px;
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.15s;
+}
+.modal-input:focus {
+    border-color: var(--accent);
+}
+.btn-danger-solid {
+    background: #e05555;
+    border: none;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+.btn-danger-solid:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.btn-danger-solid:not(:disabled):hover {
+    background: #c94444;
+}
+
 .fw-400 { font-weight: 400; }
 .fw-500 { font-weight: 500; }
 .fw-600 { font-weight: 600; }
@@ -1809,46 +1901,60 @@ body.light-theme .character-preview-content .btn-secondary:hover {
 
 /* ===== 专注动画区域 ===== */
 .focus-anim-section {
+    position: relative;
     margin-top: 4px;
     margin-bottom: 24px;
-}
-.focus-anim-wrapper {
-    position: relative;
-    display: inline-block;
-    border-radius: 18px;
-    overflow: hidden;
-    background: var(--bg-header);
-    border: 1px solid var(--border-light);
-    box-shadow: 0 4px 18px rgba(0,0,0,0.18);
-    max-width: 100%;
-    min-width: 120px;
-    min-height: 100px;
     display: flex;
     align-items: center;
     justify-content: center;
+    min-height: 80px;
 }
-.focus-anim-gif {
+.focus-anim-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+.focus-anim-video {
     display: block;
     max-width: 100%;
-    max-height: 260px;
-    min-width: 100px;
+    max-height: 280px;
+    min-width: 80px;
     object-fit: contain;
-    border-radius: 18px;
-    animation: focusAnimFadeIn 0.4s ease;
+    border-radius: 8px;
+    /* 卡片样式 */
+    border: 1px solid var(--border-light);
+    background-color: var(--bg-header);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.15);
 }
 @keyframes focusAnimFadeIn {
     from { opacity: 0; transform: scale(0.95); }
     to   { opacity: 1; transform: scale(1); }
 }
+
+/* 双人双图并排 */
+.focus-anim-duo-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    max-height: 300px;
+}
+.focus-anim-duo-container .focus-anim-video {
+    max-height: 280px;
+    width: 100%;
+}
+
 .focus-anim-customize-btn {
     position: absolute;
-    top: 8px;
-    right: 8px;
-    background: rgba(0,0,0,0.48);
+    top: 4px;
+    right: 4px;
+    background: rgba(0,0,0,0.4);
     border: none;
     color: white;
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
     border-radius: 8px;
     display: flex;
     align-items: center;
@@ -1906,6 +2012,51 @@ body.light-theme .character-preview-content .btn-secondary:hover {
 .focus-anim-grid::-webkit-scrollbar { width: 4px; }
 .focus-anim-grid::-webkit-scrollbar-track { background: transparent; }
 .focus-anim-grid::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+
+/* 双人模式切换器 */
+.focus-anim-duo-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: var(--bg-header);
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+}
+.focus-anim-duo-mode-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    font-weight: 500;
+}
+.focus-anim-mode-btns {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.focus-anim-mode-btn {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1.5px solid var(--border-strong);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+.focus-anim-mode-btn:hover:not(.active) {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+.focus-anim-mode-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+    font-weight: 600;
+}
 .focus-anim-item {
     position: relative;
     border-radius: 12px;
