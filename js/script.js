@@ -1442,6 +1442,9 @@
     }
 
     if (focusState.ai.enabled) {
+        // 锁定开关
+        const inviteToggleMain = document.getElementById('inviteToggleMain');
+        if (inviteToggleMain) inviteToggleMain.disabled = true;
         // 20% 概率被拒绝
         if (Math.random() < 0.2) {
             addMessage('assistant', '抱歉，我现在有点事情，没法陪你一起专注……');
@@ -1534,6 +1537,50 @@
     syncFocusUI();
   }
 
+  async function generateAiFocusActivity() {
+    // 收集最近20条消息作为聊天上下文
+    const recentMsgs = messages.slice(-20)
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .map(m => `[${m.role === 'user' ? '用户' : '角色'}] ${m.content}`)
+        .join('\n');
+
+    const prompt = `你是一个角色扮演AI，请根据以下信息推荐一个专注活动名称和时长（分钟）。
+  近期聊天记录：
+  ${recentMsgs || '无'}
+
+  你的角色设定：
+  - 姓名：${charNameInput.value}
+  - 性格：${charPersonalityInput.value}
+  - 经历：${charBackstoryInput.value}
+  - 当前用户的活动是：${focusState.user.activity}（${focusState.user.durationSec ? Math.round(focusState.user.durationSec/60) + '分钟' : '未设置'}）
+
+  请综合考虑：
+  - 如果近期聊天中提到了具体的活动（如阅读、运动、写作等），优先采用（约50%权重）。
+  - 其次基于角色设定、习惯推荐合适的活动（45%权重）。
+  - 极少数情况下可以模仿用户的活动（5%权重）。
+
+  返回严格JSON格式，不要任何其他文字：
+  {"activity":"活动名称","minutes":数字}
+
+  活动名称应简短（2-4字），分钟数在10-180之间。`;
+
+    const reply = await callAI(prompt, '你是一个专注活动推荐助手，只输出JSON。');
+    try {
+        const json = JSON.parse(reply.trim());
+        if (json.activity && typeof json.minutes === 'number') {
+            return {
+                activity: json.activity,
+                minutes: Math.max(10, Math.min(180, json.minutes))
+            };
+        }
+    } catch(e) {}
+    // 后备
+    return {
+        activity: '陪你专注',
+        minutes: 25
+    };
+  }
+
   function sendFocusEndMessage() {
     // 当对方自主完成专注时发送一条消息
     addMessage('assistant', '我结束了专注');
@@ -1574,11 +1621,12 @@
     const activitySelectId = 'focusActivitySelectModal';
     const activityCustomId = 'focusActivityCustomModal';
     const minutesId = 'focusMinutesModal';
-    const modeToggleId = 'focusModeToggleModal';
     const aiActivityId = 'focusAiActivityModal';
-    const aiMinutesId = 'focusAiMinutesModal';
-    const inviteToggleId = 'inviteToggle';
-    const aiSettingsContainerId = 'focusAiSettingsContainer';
+    const aiMinutesId = 'focusAiMinutesModal'; // 隐藏的，用于存储时间值
+    const aiSuggestedTimeDisplayId = 'aiSuggestedTimeDisplay';
+
+    // 根据正计时/倒计时决定是否显示时间设置
+    const showMinutes = focusState.user.mode !== 'up';
 
     const body = `
       <div class="config-group">
@@ -1594,71 +1642,111 @@
         </select>
         <input type="text" id="${activityCustomId}" class="hidden" placeholder="输入自定义活动…">
       </div>
-      <div class="config-group">
+      <div class="config-group" style="display:${showMinutes ? 'block' : 'none'}">
         <label>我的时间（分钟）</label>
         <input type="number" id="${minutesId}" min="1" max="180">
       </div>
-      <div class="theme-toggle-row">
-        <span class="theme-toggle-label"><i class="fas fa-stopwatch"></i> 倒计时 / 正计时</span>
-        <div class="apple-toggle" id="${modeToggleId}"></div>
-      </div>
 
-      <div class="theme-toggle-row">
-        <span class="theme-toggle-label"><i class="fas fa-user-friends"></i> 邀请对方一起</span>
-        <div class="apple-toggle" id="${inviteToggleId}"></div>
-      </div>
-
-      <div id="${aiSettingsContainerId}" style="display:none;">
-        <div class="config-group mt-16">
-          <label>对方活动（开始后不可修改）</label>
+      <!-- 对方专注设置 -->
+      <div class="mt-16">
+        <label style="font-weight:600;"><i class="fas fa-user-astronaut"></i> 对方专注</label>
+        <div class="config-group mt-8">
+          <label>对方活动（AI建议或手动修改）</label>
           <input type="text" id="${aiActivityId}" placeholder="例如：陪你专注 / 看书 / 写作">
           <button class="btn btn-sm btn-secondary mt-8" id="aiSuggestBtn" type="button"><i class="fas fa-magic"></i> AI 建议</button>
         </div>
-        <div class="config-group">
-          <label>对方时间（分钟，开始后不可修改）</label>
-          <input type="number" id="${aiMinutesId}" min="1" max="180">
+        <div class="mt-8 fs-13 text-secondary" id="${aiSuggestedTimeDisplayId}">
+          对方预计时长：未设置
         </div>
-        <div class="fs-13 text-secondary mt-8">对方会在你开始专注后自动开始，之后不受你控制。</div>
+        <input type="hidden" id="${aiMinutesId}" value=""> <!-- 隐藏存储分钟数 -->
       </div>
     `;
 
     showCommonDialog({
-        title: '选择专注活动',
+        title: '专注设置',
         customBody: body,
         confirmText: '保存',
         onConfirm: () => {
             const sel = document.getElementById(activitySelectId);
             const custom = document.getElementById(activityCustomId);
             const mins = Number(document.getElementById(minutesId)?.value || 25);
-            const modeToggle = document.getElementById(modeToggleId);
-            const isUp = !!modeToggle?.classList.contains('active');
             const activity = (sel?.value === '自定义' ? (custom?.value || '') : (sel?.value || '')).trim();
-            const inviteToggle = document.getElementById(inviteToggleId);
-            const inviteEnabled = inviteToggle?.classList.contains('active') ?? false;
 
             setUserFocusActivity(activity || '专注');
             setUserFocusMinutes(mins);
-            setUserFocusMode(isUp ? 'up' : 'down');
 
-            if (inviteEnabled) {
-                focusState.ai.enabled = true;
-                if (!focusState.ai.locked) {
-                    const aiActivity = (document.getElementById(aiActivityId)?.value || '').trim();
-                    const aiMins = Math.max(1, Math.min(999, Number(document.getElementById(aiMinutesId)?.value || mins)));
-                    focusState.ai.activity = aiActivity || `陪你一起${focusState.user.activity || '专注'}`;
-                    focusState.ai.durationSec = Math.round(aiMins * 60);
-                }
-            } else {
-                focusState.ai.enabled = false;
-                // 如果之前对方未锁定，可以清空设置（保持界面整洁）
-                focusState.ai.activity = '';
-                focusState.ai.durationSec = 0;
-            }
+            // 保存对方设置
+            const aiActivity = (document.getElementById(aiActivityId)?.value || '').trim();
+            const aiMins = Number(document.getElementById(aiMinutesId)?.value || 25);
+            if (aiActivity) focusState.ai.activity = aiActivity;
+            if (aiMins > 0) focusState.ai.durationSec = Math.round(aiMins * 60);
 
             saveFocusState();
             syncFocusUI();
         }
     });
+
+    setTimeout(() => {
+        const sel = document.getElementById(activitySelectId);
+        const custom = document.getElementById(activityCustomId);
+        const minsEl = document.getElementById(minutesId);
+        const aiActEl = document.getElementById(aiActivityId);
+        const aiMinEl = document.getElementById(aiMinutesId);
+        const aiTimeDisplay = document.getElementById(aiSuggestedTimeDisplayId);
+
+        const presets = ['学习','阅读','写作','工作','运动','冥想'];
+        const currentActivity = (focusState.user.activity || '').trim();
+        const matched = presets.includes(currentActivity);
+        if (sel) sel.value = matched ? currentActivity : '自定义';
+        if (custom) {
+            custom.classList.toggle('hidden', matched);
+            custom.value = matched ? '' : currentActivity;
+        }
+        if (minsEl) minsEl.value = String(Math.max(1, Math.round((focusState.user.durationSec || 1500) / 60)));
+
+        // 初始化对方数据
+        if (aiActEl) aiActEl.value = focusState.ai.activity || '';
+        if (aiMinEl) aiMinEl.value = focusState.ai.durationSec ? Math.round(focusState.ai.durationSec / 60) : '';
+        if (aiTimeDisplay) {
+            const mins = focusState.ai.durationSec ? Math.round(focusState.ai.durationSec / 60) : null;
+            aiTimeDisplay.textContent = mins ? `对方预计时长：${mins} 分钟` : '对方预计时长：未设置';
+        }
+
+        // AI 建议按钮
+        const aiSuggestBtn = document.getElementById('aiSuggestBtn');
+        if (aiSuggestBtn) {
+            aiSuggestBtn.addEventListener('click', async () => {
+                const activityInput = document.getElementById(aiActivityId);
+                const timeInput = document.getElementById(aiMinutesId);
+                const timeDisplay = document.getElementById(aiSuggestedTimeDisplayId);
+                if (!activityInput) return;
+
+                activityInput.value = '生成中…';
+                activityInput.disabled = true;
+                try {
+                    const result = await generateAiFocusActivity();
+                    if (result) {
+                        activityInput.value = result.activity;
+                        timeInput.value = result.minutes;
+                        if (timeDisplay) timeDisplay.textContent = `对方预计时长：${result.minutes} 分钟`;
+                    }
+                } catch(e) {
+                    activityInput.value = '陪你专注';
+                    timeInput.value = '25';
+                    if (timeDisplay) timeDisplay.textContent = '对方预计时长：25 分钟';
+                }
+                activityInput.disabled = false;
+            });
+        }
+
+        sel?.addEventListener('change', () => {
+            if (!custom) return;
+            const isCustom = sel.value === '自定义';
+            custom.classList.toggle('hidden', !isCustom);
+            if (isCustom) custom.focus();
+        });
+    }, 0);
+  }
 
     // 初始化弹窗内容
     setTimeout(() => {
@@ -1898,6 +1986,19 @@
       focusModeToggle.classList.toggle('active');
       setUserFocusMode(focusModeToggle.classList.contains('active') ? 'up' : 'down');
     });
+    // 主界面邀请对方开关
+    const inviteToggleMain = document.getElementById('inviteToggleMain');
+    if (inviteToggleMain) {
+        inviteToggleMain.classList.toggle('active', focusState.ai.enabled);
+        inviteToggleMain.addEventListener('click', () => {
+            inviteToggleMain.classList.toggle('active');
+            focusState.ai.enabled = inviteToggleMain.classList.contains('active');
+            // 如果已经锁定（之前开始过专注），不能改变邀请状态？可以根据需求来，这里简单处理：一旦开始专注后不允许修改。
+            // 我们可以在 startUserFocus 中锁定 toggle，这里先不处理。
+            saveFocusState();
+            syncFocusUI();
+        });
+    }
     focusStartBtn?.addEventListener('click', startUserFocus);
     focusStopBtn?.addEventListener('click', stopUserFocus);
 
