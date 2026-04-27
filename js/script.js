@@ -1332,6 +1332,8 @@
     focusState.user.mode = focusState.user.mode === 'up' ? 'up' : 'down';
     focusState.ai.mode = focusState.ai.mode === 'up' ? 'up' : 'down';
     if (typeof focusState.ai.locked !== 'boolean') focusState.ai.locked = false;
+    // 如果AI专注没有在运行，清除locked状态（防止上次会话异常结束导致按钮被锁死）
+    if (!focusState.ai.running) focusState.ai.locked = false;
 
     focusState.user.durationSec = Math.max(0, Number(focusState.user.durationSec) || 0);
     focusState.user.remainingSec = Math.max(0, Number(focusState.user.remainingSec) || 0);
@@ -1578,6 +1580,14 @@
 
   function endUserFocus() {
     resetUserOnly();
+    // 显示专注结束弹窗
+    showCommonDialog({
+      title: '⭐专注结束',
+      message: '',
+      showCancel: false,
+      confirmText: '好的',
+      onConfirm: null
+    });
   }
 
   function resetUserOnly() {
@@ -1609,6 +1619,19 @@
     }
     focusState.ai.enabled = false;   // 卡片隐藏
     focusState.ai.locked = false;    // 解锁，下次可重新设置
+
+    // 添加分割线标识
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+    messages.push({
+      role: 'assistant',
+      content: `对方专注结束 · ${timeStr}`,
+      timestamp: Date.now(),
+      isReset: true
+    });
+    saveMessagesToStorage();
+    renderMessages();
+
     saveFocusState();
     syncFocusUI();
   }
@@ -1685,8 +1708,18 @@
   }
 
   function sendFocusEndMessage() {
-    // 当对方自主完成专注时发送一条消息
-    addMessage('assistant', '我结束了专注');
+    // 当对方自主完成专注时，添加带时间的分割线标识
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+    // 添加分割线消息，标记为 reset 类型
+    messages.push({
+      role: 'assistant',
+      content: `对方专注结束 · ${timeStr}`,
+      timestamp: Date.now(),
+      isReset: true
+    });
+    saveMessagesToStorage();
+    renderMessages();
   }
 
   function setUserFocusActivity(activity) {
@@ -2192,6 +2225,9 @@
       if (file) { importDataFromFile(file); importFileInput.value=''; }
     });
 
+    // ===== 清除所有数据按钮 =====
+    document.getElementById('clearAllDataBtn')?.addEventListener('click', openClearAllConfirm);
+
     setTimeout(refreshStorageStats, 100);
     initUploadButtons();
     updateCharacterPreview();
@@ -2223,90 +2259,201 @@
 
     // ===== 专注动画自定义按钮 =====
     document.getElementById('focusAnimCustomizeBtn')?.addEventListener('click', openFocusAnimManager);
+
+    // 占位区快速上传按钮（默认上传用户动画）
+    document.getElementById('focusAnimQuickUploadBtn')?.addEventListener('click', e => {
+      e.stopPropagation();
+      triggerFocusAnimUpload('user');
+    });
   }
 
   // ============================================================
-  // ===== 专注动画系统 =====
+  // ===== 专注动画系统 v2 =====
   // ============================================================
+  //
+  // 3个分类: user=用户专注 / character=AI角色专注 / duo=双人
+  // 双人模式: duoMode='single'(播一个双人GIF) | 'dual'(同时播两个单人GIF)
+  // 匹配逻辑: 谁在专注就播放谁的动画
+  //
 
-  /**
-   * focusAnimLibrary: { user: [{id, name, src}], duo: [{id, name, src}] }
-   * focusAnimSelected: { user: id|null, duo: id|null }
-   * 分类：'user' = 用户/角色动画（单人），'duo' = 双人动画
-   */
-  let focusAnimLibrary = { user: [], duo: [] };
-  let focusAnimSelected = { user: null, duo: null };
+  let focusAnimLibrary  = { user: [], character: [], duo: [] };
+  let focusAnimSelected = { user: null, character: null, duo: null };
+  let focusAnimDuoMode  = 'single'; // 'single' | 'dual'
 
   function loadFocusAnimData() {
     try {
-      const lib = localStorage.getItem('focus_anim_library');
-      if (lib) focusAnimLibrary = JSON.parse(lib);
-    } catch(e) {}
-    try {
-      const sel = localStorage.getItem('focus_anim_selected');
-      if (sel) focusAnimSelected = JSON.parse(sel);
+      const raw = localStorage.getItem('focus_anim_data');
+      if (raw) {
+        const data = JSON.parse(raw);
+        focusAnimLibrary  = data.library  || { user: [], character: [], duo: [] };
+        focusAnimSelected = data.selected || { user: null, character: null, duo: null };
+        focusAnimDuoMode  = data.duoMode || 'single';
+      }
     } catch(e) {}
   }
 
   function saveFocusAnimData() {
-    localStorage.setItem('focus_anim_library', JSON.stringify(focusAnimLibrary));
-    localStorage.setItem('focus_anim_selected', JSON.stringify(focusAnimSelected));
+    localStorage.setItem('focus_anim_data', JSON.stringify({
+      library:  focusAnimLibrary,
+      selected: focusAnimSelected,
+      duoMode:  focusAnimDuoMode
+    }));
   }
 
-  /** 根据当前专注状态决定显示哪个动画 */
+  /** 取某个分类当前选中动画的src，没有则自动选第一个 */
+  function getAnimSrc(category) {
+    const list = focusAnimLibrary[category] || [];
+    console.log(`[getAnimSrc] category=${category}, list.length=${list.length}, selected=${focusAnimSelected[category]}`);
+    let id = focusAnimSelected[category];
+    if (!id && list.length > 0) {
+      id = list[0].id;
+      focusAnimSelected[category] = id;
+    }
+    if (!id) return null;
+    const found = list.find(a => a.id === id);
+    return found ? found.src : (list[0] ? (focusAnimSelected[category] = list[0].id, list[0].src) : null);
+  }
+
+  /** 根据专注状态决定显示哪些动画 */
   function syncFocusAnim() {
-    const section = document.getElementById('focusAnimSection');
-    const img = document.getElementById('focusAnimImg');
-    if (!section || !img) return;
+    const placeholder  = document.getElementById('focusAnimPlaceholder');
+    const singleVideo   = document.getElementById('focusAnimSingle');
+    const duoContainer  = document.getElementById('focusAnimDuoContainer');
+    const duoUserVideo  = document.getElementById('focusAnimDuoUser');
+    const duoCharVideo  = document.getElementById('focusAnimDuoChar');
+    if (!placeholder || !singleVideo || !duoContainer) return;
 
     const userRunning = !!focusState.user.running;
-    const aiRunning = !!(focusState.ai.enabled && focusState.ai.running);
-    const bothRunning = userRunning && aiRunning;
+    const charRunning = !!(focusState.ai.enabled && focusState.ai.running);
+    const bothRunning = userRunning && charRunning;
 
-    if (!userRunning && !aiRunning) {
-      // 两者都未运行，隐藏
-      if (section.style.display !== 'none') {
-        section.style.display = 'none';
-        img.src = '';
+    console.log(`[syncFocusAnim] userRunning=${userRunning}, charRunning=${charRunning}, bothRunning=${bothRunning}`);
+
+    // 停止并隐藏全部
+    stopAndHide(singleVideo);
+    stopAndHide(duoUserVideo);
+    stopAndHide(duoCharVideo);
+    duoContainer.style.display = 'none';
+    placeholder.style.display = 'none';
+
+    if (!userRunning && !charRunning) return; // 无人在专注
+
+    // === 双人均专注 ===
+    if (bothRunning) {
+      if (focusAnimDuoMode === 'single') {
+        const src = getAnimSrc('duo');
+        if (src) {
+          loadAndPlay(singleVideo, src);
+        } else {
+          showDuoDual();
+        }
+      } else {
+        showDuoDual();
       }
       return;
     }
 
-    // 确定用哪个分类
-    const category = bothRunning ? 'duo' : 'user';
-    const selectedId = focusAnimSelected[category];
-    const list = focusAnimLibrary[category] || [];
-
-    let animSrc = null;
-    if (selectedId) {
-      const found = list.find(a => a.id === selectedId);
-      if (found) animSrc = found.src;
-    }
-    // 如果没有选中或选中的找不到，用第一个
-    if (!animSrc && list.length > 0) {
-      animSrc = list[0].src;
-      // 自动更新选中
-      focusAnimSelected[category] = list[0].id;
-    }
-
-    if (!animSrc) {
-      // 没有可用动画，隐藏
-      section.style.display = 'none';
-      img.src = '';
-      return;
-    }
-
-    section.style.display = 'block';
-    if (img.src !== animSrc) {
-      img.src = animSrc;
+    // === 单人专注 ===
+    const src = userRunning ? getAnimSrc('user') : getAnimSrc('character');
+    console.log(`[syncFocusAnim] src=${src ? 'found' : 'null'}`);
+    if (src) {
+      loadAndPlay(singleVideo, src);
+    } else {
+      placeholder.style.display = 'flex';
     }
   }
 
+  /** 停止视频并清空src */
+  function stopAndHide(video) {
+    if (!video) return;
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    video.style.display = 'none';
+  }
+
+  /** 加载视频并播完从头循环 */
+  function loadAndPlay(video, src) {
+    if (!video) return;
+    video.removeAttribute('src');
+    video.load();
+    video.style.display = 'block';
+    video.src = src;
+    video.currentTime = 0;
+    // 等待视频准备好后再播放
+    const playVideo = () => {
+      video.play().catch(err => {
+        console.warn('视频播放失败:', err);
+      });
+    };
+    if (video.readyState >= 3) {
+      // 视频已经可以播放
+      playVideo();
+    } else {
+      // 等待 canplay 事件
+      video.oncanplay = () => {
+        video.oncanplay = null;
+        playVideo();
+      };
+    }
+    // 播完从头再来（播完触发 ended 时重新从0播放）
+    video.onended = () => {
+      video.currentTime = 0;
+      playVideo();
+    };
+  }
+
+  function showDuoDual() {
+    const duoContainer = document.getElementById('focusAnimDuoContainer');
+    const duoUserVideo = document.getElementById('focusAnimDuoUser');
+    const duoCharVideo = document.getElementById('focusAnimDuoChar');
+    duoContainer.style.display = 'flex';
+    const userRunning = !!focusState.user.running;
+    const charRunning = !!(focusState.ai.enabled && focusState.ai.running);
+    if (userRunning) {
+      const src = getAnimSrc('user');
+      if (src) loadAndPlay(duoUserVideo, src);
+    }
+    if (charRunning) {
+      const src = getAnimSrc('character');
+      if (src) loadAndPlay(duoCharVideo, src);
+    }
+  }
+
+  /** 直接触发上传到指定分类 */
+  function triggerFocusAnimUpload(category) {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'image/gif,image/png,image/jpeg,image/webp,image/apng';
+    inp.multiple = true;
+    inp.onchange = e => {
+      const files = Array.from(e.target.files);
+      if (files.length === 0) return;
+      let processed = 0;
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const id = 'anim_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+          const entry = { id, name: file.name.replace(/\.[^.]+$/, ''), src: ev.target.result };
+          if (!focusAnimLibrary[category]) focusAnimLibrary[category] = [];
+          focusAnimLibrary[category].push(entry);
+          if (processed === 0) focusAnimSelected[category] = id;
+          processed++;
+          if (processed === files.length) {
+            saveFocusAnimData();
+            syncFocusAnim();
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+    };
+    inp.click();
+  }
+
   // ---------- 动画管理弹窗 ----------
-  let focusAnimManagerTab = 'user'; // 当前激活 tab
+  let focusAnimManagerTab = 'user';
 
   function openFocusAnimManager() {
-    // 创建弹窗（如已存在则复用）
     let overlay = document.getElementById('focusAnimManagerOverlay');
     if (!overlay) {
       overlay = document.createElement('div');
@@ -2315,18 +2462,29 @@
       overlay.innerHTML = `
         <div class="modal-container">
           <div class="modal-header">
-            <h3><i class="fas fa-images mr-8"></i>专注动画</h3>
+            <h3><i class="fas fa-images mr-8"></i>专注动画管理</h3>
             <button class="modal-close" id="closeFocusAnimModal">&times;</button>
           </div>
           <div class="modal-body">
             <div class="focus-anim-tabs" id="focusAnimTabs">
-              <button class="focus-anim-tab active" data-cat="user">用户/角色动画</button>
+              <button class="focus-anim-tab active" data-cat="user">用户动画</button>
+              <button class="focus-anim-tab" data-cat="character">角色动画</button>
               <button class="focus-anim-tab" data-cat="duo">双人动画</button>
             </div>
             <div class="focus-anim-grid" id="focusAnimGrid"></div>
-            <p class="fs-12 text-secondary mt-10" style="text-align:center;">
-              <i class="fas fa-info-circle mr-4"></i>点击动画可设为当前使用；专注进行中立即生效
-            </p>
+            <!-- 双人模式切换（仅在双人tab时显示） -->
+            <div class="focus-anim-duo-toggle" id="focusAnimDuoToggle" style="display:none;">
+              <div class="focus-anim-duo-mode-label">双人模式</div>
+              <div class="focus-anim-mode-btns">
+                <button class="focus-anim-mode-btn active" id="duoModeSingleBtn" data-mode="single">
+                  <i class="fas fa-user-friends mr-4"></i>一个双人GIF
+                </button>
+                <button class="focus-anim-mode-btn" id="duoModeDualBtn" data-mode="dual">
+                  <i class="fas fa-columns mr-4"></i>两个单人GIF并排
+                </button>
+              </div>
+            </div>
+
           </div>
           <div class="modal-footer">
             <button class="btn btn-secondary" id="closeFocusAnimModalBtn">关闭</button>
@@ -2335,7 +2493,6 @@
       `;
       document.body.appendChild(overlay);
 
-      // 关闭
       const close = () => overlay.classList.remove('show');
       overlay.querySelector('#closeFocusAnimModal').addEventListener('click', close);
       overlay.querySelector('#closeFocusAnimModalBtn').addEventListener('click', close);
@@ -2348,12 +2505,37 @@
         focusAnimManagerTab = tab.dataset.cat;
         overlay.querySelectorAll('.focus-anim-tab').forEach(t => t.classList.toggle('active', t.dataset.cat === focusAnimManagerTab));
         renderFocusAnimGrid();
+        // 显示/隐藏双人模式切换器
+        const toggle = document.getElementById('focusAnimDuoToggle');
+        if (toggle) {
+          toggle.style.display = focusAnimManagerTab === 'duo' ? 'flex' : 'none';
+          document.getElementById('duoModeSingleBtn')?.classList.toggle('active', focusAnimDuoMode === 'single');
+          document.getElementById('duoModeDualBtn')?.classList.toggle('active', focusAnimDuoMode === 'dual');
+        }
+      });
+
+      // 双人模式切换
+      overlay.querySelector('#focusAnimDuoToggle').addEventListener('click', e => {
+        const btn = e.target.closest('[data-mode]');
+        if (!btn) return;
+        focusAnimDuoMode = btn.dataset.mode;
+        saveFocusAnimData();
+        syncFocusAnim();
+        overlay.querySelectorAll('.focus-anim-mode-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.mode === focusAnimDuoMode);
+        });
       });
     }
 
     focusAnimManagerTab = 'user';
     overlay.querySelectorAll('.focus-anim-tab').forEach(t => t.classList.toggle('active', t.dataset.cat === 'user'));
     renderFocusAnimGrid();
+
+    const toggle = document.getElementById('focusAnimDuoToggle');
+    if (toggle) {
+      toggle.style.display = 'none';
+    }
+
     overlay.classList.add('show');
   }
 
@@ -2366,10 +2548,12 @@
 
     grid.innerHTML = '';
 
+    const catLabel = { user: '用户动画', character: '角色动画', duo: '双人动画' }[cat] || '动画';
+
     if (list.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'focus-anim-empty';
-      empty.innerHTML = `<i class="fas fa-film fa-2x mb-8" style="display:block;opacity:0.3;"></i>暂无动画，点击 + 上传`;
+      empty.innerHTML = `<i class="fas fa-film fa-2x mb-8" style="display:block;opacity:0.3;"></i>暂无${catLabel}，点击 + 上传`;
       grid.appendChild(empty);
     } else {
       list.forEach(anim => {
@@ -2384,7 +2568,7 @@
         const delBtn = document.createElement('button');
         delBtn.className = 'focus-anim-item-del';
         delBtn.title = '删除';
-        delBtn.innerHTML = '<i class="fas fa-times"></i>';
+        delBtn.innerHTML = '&times;';
         delBtn.addEventListener('click', e => {
           e.stopPropagation();
           focusAnimLibrary[cat] = focusAnimLibrary[cat].filter(a => a.id !== anim.id);
@@ -2407,7 +2591,6 @@
       });
     }
 
-    // 添加按钮
     const addBtn = document.createElement('button');
     addBtn.className = 'focus-anim-add-btn';
     addBtn.title = '上传动画（GIF/图片）';
@@ -2427,7 +2610,6 @@
             const entry = { id, name: file.name.replace(/\.[^.]+$/, ''), src: ev.target.result };
             if (!focusAnimLibrary[cat]) focusAnimLibrary[cat] = [];
             focusAnimLibrary[cat].push(entry);
-            // 自动选中第一个上传的
             if (processed === 0) focusAnimSelected[cat] = id;
             processed++;
             if (processed === files.length) {
@@ -2442,6 +2624,97 @@
       inp.click();
     });
     grid.appendChild(addBtn);
+  }
+
+  // ============================================================
+  // ===== 清除所有数据确认弹窗 =====
+  // ============================================================
+  let clearConfirmStep = 1;
+
+  function openClearAllConfirm() {
+    let overlay = document.getElementById('clearAllConfirmOverlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'clearAllConfirmOverlay';
+      overlay.className = 'modal-overlay clear-confirm-modal';
+      document.body.appendChild(overlay);
+    }
+
+    function renderStep(step) {
+      clearConfirmStep = step;
+      if (step === 1) {
+        overlay.innerHTML = `
+          <div class="modal-container">
+            <div class="modal-header">
+              <h3><i class="fas fa-exclamation-triangle mr-8" style="color:#e05555;"></i>确认清除</h3>
+              <button class="modal-close" onclick="closeClearConfirm()">&times;</button>
+            </div>
+            <div class="modal-body">
+              <div class="clear-confirm-icon"><i class="fas fa-skull-crossbones"></i></div>
+              <p class="clear-confirm-text">
+                确定要清除 <strong>所有本地数据</strong> 吗？<br>
+                包括：消息记录、角色设定、专注数据、上传的动画等。<br>
+                此操作 <strong>不可恢复</strong>。
+              </p>
+              <button class="btn btn-danger-outline w-full" id="clearConfirmStep2Btn">
+                <i class="fas fa-arrow-right mr-6"></i>是的，继续
+              </button>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary w-full" onclick="closeClearConfirm()">取消</button>
+            </div>
+          </div>
+        `;
+        overlay.querySelector('#clearConfirmStep2Btn').addEventListener('click', () => renderStep(2));
+      } else {
+        overlay.innerHTML = `
+          <div class="modal-container">
+            <div class="modal-header">
+              <h3><i class="fas fa-skull-crossbones mr-8" style="color:#e05555;"></i>最后确认</h3>
+              <button class="modal-close" onclick="closeClearConfirm()">&times;</button>
+            </div>
+            <div class="modal-body">
+              <div class="clear-confirm-icon"><i class="fas fa-fire-alt"></i></div>
+              <p class="clear-confirm-text">
+                如果你确定要清除一切，<br>请在下方输入 <strong>我确认</strong> 并点击删除。
+              </p>
+              <input type="text" id="clearConfirmInput" class="modal-input" placeholder="请输入：我确认" autocomplete="off">
+            </div>
+            <div class="modal-footer" style="flex-direction:column;gap:8px;">
+              <button class="btn btn-danger-solid w-full" id="clearConfirmExecuteBtn" disabled>
+                <i class="fas fa-trash-alt mr-6"></i>删除所有数据
+              </button>
+              <button class="btn btn-secondary w-full" onclick="closeClearConfirm()">取消</button>
+            </div>
+          </div>
+        `;
+        const inp = overlay.querySelector('#clearConfirmInput');
+        const execBtn = overlay.querySelector('#clearConfirmExecuteBtn');
+        inp.addEventListener('input', () => {
+          execBtn.disabled = inp.value.trim() !== '我确认';
+        });
+        execBtn.addEventListener('click', executeClearAllData);
+      }
+      overlay.classList.add('show');
+    }
+
+    window.closeClearConfirm = () => overlay.classList.remove('show');
+    overlay.onclick = e => { if (e.target === overlay) window.closeClearConfirm(); };
+    renderStep(1);
+  }
+
+  function executeClearAllData() {
+    localStorage.clear();
+    if (typeof focusState !== 'undefined') {
+      focusState.user = { running: false, remainingSeconds: 0, startTime: null, activity: '学习', mode: 'countdown' };
+      focusState.ai   = { enabled: false, running: false, remainingSeconds: 0, startTime: null, activity: '专注' };
+    }
+    focusAnimLibrary  = { user: [], character: [], duo: [] };
+    focusAnimSelected = { user: null, character: null, duo: null };
+    focusAnimDuoMode  = 'single';
+    if (typeof resetAppState === 'function') resetAppState();
+    if (window.closeClearConfirm) window.closeClearConfirm();
+    setTimeout(() => location.reload(), 300);
   }
 
   init();
