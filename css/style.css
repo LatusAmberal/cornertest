@@ -178,6 +178,9 @@ body {
     color: var(--accent);
 }
 
+.mobile-only { display: none; }
+.sidebar-overlay { display: none; }
+
 /* 消息区 */
 .messages-area {
     flex: 1;
@@ -189,9 +192,29 @@ body {
     scroll-behavior: smooth;
 }
 
-.message-row { display: flex; width: 100%; align-items: flex-end; }
+.message-row { display: flex; width: 100%; align-items: flex-end; gap: 8px; }
 .message-row.assistant { justify-content: flex-start; }
-.message-row.user { justify-content: flex-end; gap: 8px; }
+.message-row.user { justify-content: flex-end; }
+
+.message-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--bg-header);
+    border: 1px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+.message-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
 
 .message-bubble {
     max-width: 70%;
@@ -1175,6 +1198,49 @@ body {
 }
 body.light-theme .profile-banner::before {
     background: rgba(255, 255, 255, 0.75); /*白色模式个人主页蒙版透明度*/
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        height: 100vh;
+        z-index: 1600;
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+    }
+
+    body.mobile-sidebar-open .sidebar {
+        transform: translateX(0);
+    }
+
+    .sidebar-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.55);
+        z-index: 1500;
+    }
+
+    body.mobile-sidebar-open .sidebar-overlay {
+        display: block;
+    }
+
+    .mobile-only {
+        display: flex;
+    }
+
+    .messages-area {
+        padding: 14px 12px 8px;
+    }
+
+    .message-bubble {
+        max-width: 78%;
+    }
+
+    .input-area {
+        padding: 10px 12px;
+    }
 }
 
 /* 内容层置于蒙版之上 */
