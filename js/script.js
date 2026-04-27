@@ -56,20 +56,17 @@
   const editCharacterAvatarBtn = document.getElementById('editCharacterAvatarBtn');
   const editCharacterCoverBtn = document.getElementById('editCharacterCoverBtn');
   const focusIcon = document.getElementById('focusIcon');
-  const focusActivitySelect = document.getElementById('focusActivitySelect');
-  const focusCustomActivityInput = document.getElementById('focusCustomActivityInput');
-  const focusMinutesInput = document.getElementById('focusMinutesInput');
   const focusUserTimerDisplay = document.getElementById('focusUserTimerDisplay');
   const focusUserActivityDisplay = document.getElementById('focusUserActivityDisplay');
+  const focusMenuBtn = document.getElementById('focusMenuBtn');
+  const focusModeToggle = document.getElementById('focusModeToggle');
+  const focusSettingsBtn = document.getElementById('focusSettingsBtn');
   const focusStartBtn = document.getElementById('focusStartBtn');
   const focusStopBtn = document.getElementById('focusStopBtn');
   const focusResetBtn = document.getElementById('focusResetBtn');
-  const focusInviteAiBtn = document.getElementById('focusInviteAiBtn');
   const focusAiCard = document.getElementById('focusAiCard');
   const focusAiTimerDisplay = document.getElementById('focusAiTimerDisplay');
   const focusAiActivityDisplay = document.getElementById('focusAiActivityDisplay');
-  const focusEditAiBtn = document.getElementById('focusEditAiBtn');
-  const focusRemoveAiBtn = document.getElementById('focusRemoveAiBtn');
 
   const commonDialogOverlay = document.getElementById('commonDialogOverlay');
   const dialogTitle = document.getElementById('dialogTitle');
@@ -133,8 +130,8 @@
   };
 
   let focusState = {
-    user: { activity: '学习', durationSec: 25 * 60, remainingSec: 25 * 60, running: false, lastStartTs: 0, startRemainingSec: 25 * 60 },
-    ai: { enabled: false, activity: '陪你专注', durationSec: 25 * 60, remainingSec: 25 * 60, running: false, lastStartTs: 0, startRemainingSec: 25 * 60 }
+    user: { activity: '学习', mode: 'down', durationSec: 25 * 60, remainingSec: 25 * 60, elapsedSec: 0, running: false, lastStartTs: 0, startRemainingSec: 25 * 60, startElapsedSec: 0 },
+    ai: { enabled: false, locked: false, activity: '陪你专注', mode: 'down', durationSec: 25 * 60, remainingSec: 25 * 60, elapsedSec: 0, running: false, lastStartTs: 0, startRemainingSec: 25 * 60, startElapsedSec: 0 }
   };
   let focusTickerId = null;
 
@@ -496,7 +493,7 @@
 
   // 消息操作函数
   window.handleBubbleClick = function(e, index) {
-    if (window.innerWidth <= 768) { // 手机端
+    if (window.innerWidth <= 600) { // 手机端
       const actions = e.currentTarget.querySelector('.bubble-actions');
       if (actions.classList.contains('show')) {
         actions.classList.remove('show');
@@ -1024,7 +1021,7 @@
   function openDrawer() { drawer.classList.add('open'); overlay.classList.add('show'); }
   function closeDrawer() { drawer.classList.remove('open'); overlay.classList.remove('show'); }
 
-  function isMobile() { return window.innerWidth <= 768; }
+  function isMobile() { return window.innerWidth <= 600; }
   function openMobileSidebar() {
     if (!isMobile()) return;
     document.body.classList.add('mobile-sidebar-open');
@@ -1214,10 +1211,20 @@
     return `${mm}:${ss}`;
   }
 
-  function computeRemaining(timer) {
+  function computeDownRemaining(timer) {
     if (!timer.running) return Math.max(0, timer.remainingSec || 0);
     const elapsed = (Date.now() - (timer.lastStartTs || 0)) / 1000;
     return Math.max(0, (timer.startRemainingSec || 0) - elapsed);
+  }
+
+  function computeUpElapsed(timer) {
+    if (!timer.running) return Math.max(0, timer.elapsedSec || 0);
+    const elapsed = (Date.now() - (timer.lastStartTs || 0)) / 1000;
+    return Math.max(0, (timer.startElapsedSec || 0) + elapsed);
+  }
+
+  function computeTimerSeconds(timer) {
+    return (timer.mode === 'up') ? computeUpElapsed(timer) : computeDownRemaining(timer);
   }
 
   function saveFocusState() {
@@ -1238,62 +1245,94 @@
   }
 
   function normalizeFocusAfterLoad() {
-    const uRem = computeRemaining(focusState.user);
-    if (uRem <= 0) {
-      focusState.user.remainingSec = 0;
-      focusState.user.running = false;
-      focusState.user.lastStartTs = 0;
-      focusState.user.startRemainingSec = 0;
-    } else if (focusState.user.running) {
-      focusState.user.remainingSec = uRem;
-      focusState.user.startRemainingSec = uRem;
-      focusState.user.lastStartTs = Date.now();
+    focusState.user.mode = focusState.user.mode === 'up' ? 'up' : 'down';
+    focusState.ai.mode = focusState.ai.mode === 'up' ? 'up' : 'down';
+    if (typeof focusState.ai.locked !== 'boolean') focusState.ai.locked = false;
+
+    focusState.user.durationSec = Math.max(0, Number(focusState.user.durationSec) || 0);
+    focusState.user.remainingSec = Math.max(0, Number(focusState.user.remainingSec) || 0);
+    focusState.user.elapsedSec = Math.max(0, Number(focusState.user.elapsedSec) || 0);
+    focusState.user.startRemainingSec = Math.max(0, Number(focusState.user.startRemainingSec) || 0);
+    focusState.user.startElapsedSec = Math.max(0, Number(focusState.user.startElapsedSec) || 0);
+    focusState.user.lastStartTs = Number(focusState.user.lastStartTs) || 0;
+
+    focusState.ai.durationSec = Math.max(0, Number(focusState.ai.durationSec) || 0);
+    focusState.ai.remainingSec = Math.max(0, Number(focusState.ai.remainingSec) || 0);
+    focusState.ai.elapsedSec = Math.max(0, Number(focusState.ai.elapsedSec) || 0);
+    focusState.ai.startRemainingSec = Math.max(0, Number(focusState.ai.startRemainingSec) || 0);
+    focusState.ai.startElapsedSec = Math.max(0, Number(focusState.ai.startElapsedSec) || 0);
+    focusState.ai.lastStartTs = Number(focusState.ai.lastStartTs) || 0;
+
+    if (focusState.user.durationSec <= 0) focusState.user.durationSec = 25 * 60;
+    if (focusState.ai.durationSec <= 0) focusState.ai.durationSec = focusState.user.durationSec;
+
+    if (focusState.user.mode === 'up') {
+      const uElapsed = computeUpElapsed(focusState.user);
+      focusState.user.elapsedSec = uElapsed;
+      if (focusState.user.running) {
+        focusState.user.startElapsedSec = uElapsed;
+        focusState.user.lastStartTs = Date.now();
+      } else {
+        focusState.user.lastStartTs = 0;
+      }
+    } else {
+      const uRem = computeDownRemaining(focusState.user);
+      if (uRem <= 0) {
+        focusState.user.remainingSec = 0;
+        focusState.user.running = false;
+        focusState.user.lastStartTs = 0;
+        focusState.user.startRemainingSec = 0;
+      } else if (focusState.user.running) {
+        focusState.user.remainingSec = uRem;
+        focusState.user.startRemainingSec = uRem;
+        focusState.user.lastStartTs = Date.now();
+      }
     }
 
-    const aRem = computeRemaining(focusState.ai);
     if (!focusState.ai.enabled) {
       focusState.ai.running = false;
-    } else if (aRem <= 0) {
-      focusState.ai.remainingSec = 0;
-      focusState.ai.running = false;
       focusState.ai.lastStartTs = 0;
-      focusState.ai.startRemainingSec = 0;
-    } else if (focusState.ai.running) {
-      focusState.ai.remainingSec = aRem;
-      focusState.ai.startRemainingSec = aRem;
-      focusState.ai.lastStartTs = Date.now();
+    } else if (focusState.ai.mode === 'up') {
+      const aElapsed = computeUpElapsed(focusState.ai);
+      focusState.ai.elapsedSec = aElapsed;
+      if (focusState.ai.running) {
+        focusState.ai.startElapsedSec = aElapsed;
+        focusState.ai.lastStartTs = Date.now();
+      } else {
+        focusState.ai.lastStartTs = 0;
+      }
+    } else {
+      const aRem = computeDownRemaining(focusState.ai);
+      if (aRem <= 0) {
+        focusState.ai.remainingSec = 0;
+        focusState.ai.running = false;
+        focusState.ai.lastStartTs = 0;
+        focusState.ai.startRemainingSec = 0;
+      } else if (focusState.ai.running) {
+        focusState.ai.remainingSec = aRem;
+        focusState.ai.startRemainingSec = aRem;
+        focusState.ai.lastStartTs = Date.now();
+      }
     }
   }
 
   function syncFocusUI() {
-    if (focusUserTimerDisplay) focusUserTimerDisplay.textContent = formatCountdown(computeRemaining(focusState.user));
+    if (focusUserTimerDisplay) focusUserTimerDisplay.textContent = formatCountdown(computeTimerSeconds(focusState.user));
     if (focusUserActivityDisplay) focusUserActivityDisplay.textContent = focusState.user.activity || '专注';
-
-    if (focusActivitySelect) {
-      const activity = (focusState.user.activity || '').trim();
-      const values = Array.from(focusActivitySelect.options).map(o => o.value);
-      const matched = activity && values.includes(activity) && activity !== '自定义';
-      focusActivitySelect.value = matched ? activity : '自定义';
-      if (focusCustomActivityInput) {
-        focusCustomActivityInput.classList.toggle('hidden', matched);
-        if (!matched && focusCustomActivityInput.value !== activity) focusCustomActivityInput.value = activity;
-      }
-    }
-
-    if (focusMinutesInput) {
-      const mins = Math.max(1, Math.round((focusState.user.durationSec || 1500) / 60));
-      if (Number(focusMinutesInput.value) !== mins) focusMinutesInput.value = String(mins);
-    }
+    if (focusModeToggle) focusModeToggle.classList.toggle('active', focusState.user.mode === 'up');
 
     if (focusStartBtn) {
-      const label = focusState.user.running ? '进行中' : (computeRemaining(focusState.user) > 0 && computeRemaining(focusState.user) < (focusState.user.durationSec || 0) ? '继续' : '开始');
+      const hasProgress = focusState.user.mode === 'up'
+        ? (Number(focusState.user.elapsedSec) > 0)
+        : (Number(focusState.user.remainingSec) > 0 && Number(focusState.user.remainingSec) < Number(focusState.user.durationSec || 0));
+      const label = focusState.user.running ? '进行中' : (hasProgress ? '继续' : '开始');
       focusStartBtn.innerHTML = `<i class="fas fa-play mr-8"></i>${label}`;
       focusStartBtn.disabled = focusState.user.running;
     }
     if (focusStopBtn) focusStopBtn.disabled = !focusState.user.running;
 
     if (focusAiCard) focusAiCard.style.display = focusState.ai.enabled ? 'block' : 'none';
-    if (focusAiTimerDisplay) focusAiTimerDisplay.textContent = formatCountdown(computeRemaining(focusState.ai));
+    if (focusAiTimerDisplay) focusAiTimerDisplay.textContent = formatCountdown(computeTimerSeconds(focusState.ai));
     if (focusAiActivityDisplay) focusAiActivityDisplay.textContent = focusState.ai.activity || '专注';
   }
 
@@ -1311,33 +1350,61 @@
         return;
       }
 
-      const uRem = computeRemaining(focusState.user);
-      if (focusState.user.running && uRem <= 0) {
-        focusState.user.running = false;
-        focusState.user.remainingSec = 0;
-        focusState.user.lastStartTs = 0;
-        focusState.user.startRemainingSec = 0;
+      if (focusState.user.running && focusState.user.mode !== 'up') {
+        const uRem = computeDownRemaining(focusState.user);
+        if (uRem <= 0) {
+          focusState.user.running = false;
+          focusState.user.remainingSec = 0;
+          focusState.user.lastStartTs = 0;
+          focusState.user.startRemainingSec = 0;
+        }
       }
 
-      const aRem = computeRemaining(focusState.ai);
-      if (focusState.ai.enabled && focusState.ai.running && aRem <= 0) {
-        focusState.ai.running = false;
-        focusState.ai.remainingSec = 0;
-        focusState.ai.lastStartTs = 0;
-        focusState.ai.startRemainingSec = 0;
+      if (focusState.ai.enabled && focusState.ai.running && focusState.ai.mode !== 'up') {
+        const aRem = computeDownRemaining(focusState.ai);
+        if (aRem <= 0) {
+          focusState.ai.running = false;
+          focusState.ai.remainingSec = 0;
+          focusState.ai.lastStartTs = 0;
+          focusState.ai.startRemainingSec = 0;
+        }
       }
 
       syncFocusUI();
     }, 250);
   }
 
+  function startAiFocusAuto() {
+    if (focusState.ai.running) return;
+    focusState.ai.enabled = true;
+    focusState.ai.locked = true;
+    focusState.ai.mode = focusState.user.mode;
+    focusState.ai.activity = (focusState.ai.activity || '').trim() || `陪你一起${focusState.user.activity || '专注'}`;
+    if (!focusState.ai.durationSec || focusState.ai.durationSec <= 0) focusState.ai.durationSec = focusState.user.durationSec;
+
+    focusState.ai.running = true;
+    focusState.ai.lastStartTs = Date.now();
+    if (focusState.ai.mode === 'up') {
+      focusState.ai.elapsedSec = 0;
+      focusState.ai.startElapsedSec = 0;
+    } else {
+      focusState.ai.remainingSec = focusState.ai.durationSec;
+      focusState.ai.startRemainingSec = focusState.ai.remainingSec;
+    }
+  }
+
   function startUserFocus() {
     if (focusState.user.running) return;
-    const rem = computeRemaining(focusState.user);
-    if (rem <= 0) focusState.user.remainingSec = focusState.user.durationSec;
     focusState.user.running = true;
-    focusState.user.startRemainingSec = focusState.user.remainingSec;
     focusState.user.lastStartTs = Date.now();
+    if (focusState.user.mode === 'up') {
+      focusState.user.startElapsedSec = Math.max(0, focusState.user.elapsedSec || 0);
+    } else {
+      const rem = computeDownRemaining(focusState.user);
+      if (rem <= 0) focusState.user.remainingSec = focusState.user.durationSec;
+      focusState.user.startRemainingSec = focusState.user.remainingSec;
+    }
+    startAiFocusAuto();
     saveFocusState();
     syncFocusUI();
     ensureFocusTicker();
@@ -1345,19 +1412,26 @@
 
   function stopUserFocus() {
     if (!focusState.user.running) return;
-    focusState.user.remainingSec = computeRemaining(focusState.user);
+    if (focusState.user.mode === 'up') focusState.user.elapsedSec = computeUpElapsed(focusState.user);
+    else focusState.user.remainingSec = computeDownRemaining(focusState.user);
     focusState.user.running = false;
     focusState.user.lastStartTs = 0;
     focusState.user.startRemainingSec = focusState.user.remainingSec;
+    focusState.user.startElapsedSec = focusState.user.elapsedSec || 0;
     saveFocusState();
     syncFocusUI();
   }
 
   function resetUserFocus() {
     focusState.user.running = false;
-    focusState.user.remainingSec = focusState.user.durationSec;
     focusState.user.lastStartTs = 0;
-    focusState.user.startRemainingSec = focusState.user.remainingSec;
+    if (focusState.user.mode === 'up') {
+      focusState.user.elapsedSec = 0;
+      focusState.user.startElapsedSec = 0;
+    } else {
+      focusState.user.remainingSec = focusState.user.durationSec;
+      focusState.user.startRemainingSec = focusState.user.remainingSec;
+    }
     saveFocusState();
     syncFocusUI();
   }
@@ -1372,66 +1446,133 @@
     const m = Math.max(1, Math.min(999, Number(minutes) || 25));
     stopUserFocus();
     focusState.user.durationSec = Math.round(m * 60);
-    focusState.user.remainingSec = focusState.user.durationSec;
-    focusState.user.startRemainingSec = focusState.user.remainingSec;
+    if (focusState.user.mode === 'up') {
+      focusState.user.elapsedSec = 0;
+      focusState.user.startElapsedSec = 0;
+    } else {
+      focusState.user.remainingSec = focusState.user.durationSec;
+      focusState.user.startRemainingSec = focusState.user.remainingSec;
+    }
     saveFocusState();
     syncFocusUI();
   }
 
-  function openAiEditDialog({ title, activity, minutes, confirmText, onConfirm }) {
-    const actId = 'focusAiActivityInput';
-    const minId = 'focusAiMinutesInput';
+  function setUserFocusMode(mode) {
+    const next = mode === 'up' ? 'up' : 'down';
+    if (focusState.user.mode === next) return;
+    stopUserFocus();
+    focusState.user.mode = next;
+    resetUserFocus();
+    saveFocusState();
+    syncFocusUI();
+  }
+
+  function openFocusSettingsDialog() {
+    const activitySelectId = 'focusActivitySelectModal';
+    const activityCustomId = 'focusActivityCustomModal';
+    const minutesId = 'focusMinutesModal';
+    const modeToggleId = 'focusModeToggleModal';
+    const aiActivityId = 'focusAiActivityModal';
+    const aiMinutesId = 'focusAiMinutesModal';
+
     const body = `
       <div class="config-group">
-        <label>对方活动</label>
-        <input type="text" id="${actId}" placeholder="例如：阅读 / 写作 / 运动">
+        <label>我的活动</label>
+        <select id="${activitySelectId}">
+          <option value="学习">学习</option>
+          <option value="阅读">阅读</option>
+          <option value="写作">写作</option>
+          <option value="工作">工作</option>
+          <option value="运动">运动</option>
+          <option value="冥想">冥想</option>
+          <option value="自定义">自定义…</option>
+        </select>
+        <input type="text" id="${activityCustomId}" class="hidden" placeholder="输入自定义活动…">
       </div>
       <div class="config-group">
-        <label>对方倒计时（分钟）</label>
-        <input type="number" id="${minId}" min="1" max="999">
+        <label>我的时间（分钟）</label>
+        <input type="number" id="${minutesId}" min="1" max="999">
       </div>
+      <div class="theme-toggle-row">
+        <span class="theme-toggle-label"><i class="fas fa-stopwatch"></i> 倒计时 / 正计时</span>
+        <div class="apple-toggle" id="${modeToggleId}"></div>
+      </div>
+      <div class="config-group mt-16">
+        <label>对方活动（开始后不可修改）</label>
+        <input type="text" id="${aiActivityId}" placeholder="例如：陪你专注 / 看书 / 写作">
+      </div>
+      <div class="config-group">
+        <label>对方时间（分钟，开始后不可修改）</label>
+        <input type="number" id="${aiMinutesId}" min="1" max="999">
+      </div>
+      <div class="fs-13 text-secondary mt-8">对方会在你开始专注后自动开始，之后不受你控制。</div>
     `;
+
     showCommonDialog({
-      title,
+      title: '选择专注活动',
       customBody: body,
-      confirmText,
+      confirmText: '保存',
       onConfirm: () => {
-        const a = document.getElementById(actId)?.value || '';
-        const m = Number(document.getElementById(minId)?.value || 25);
-        onConfirm({ activity: a, minutes: m });
+        const sel = document.getElementById(activitySelectId);
+        const custom = document.getElementById(activityCustomId);
+        const mins = Number(document.getElementById(minutesId)?.value || 25);
+        const modeToggle = document.getElementById(modeToggleId);
+        const isUp = !!modeToggle?.classList.contains('active');
+        const activity = (sel?.value === '自定义' ? (custom?.value || '') : (sel?.value || '')).trim();
+
+        setUserFocusActivity(activity || '专注');
+        setUserFocusMinutes(mins);
+        setUserFocusMode(isUp ? 'up' : 'down');
+
+        if (!focusState.ai.locked) {
+          const aiActivity = (document.getElementById(aiActivityId)?.value || '').trim();
+          const aiMins = Math.max(1, Math.min(999, Number(document.getElementById(aiMinutesId)?.value || mins)));
+          focusState.ai.activity = aiActivity || `陪你一起${focusState.user.activity || '专注'}`;
+          focusState.ai.durationSec = Math.round(aiMins * 60);
+        }
+
+        saveFocusState();
+        syncFocusUI();
       }
     });
+
     setTimeout(() => {
-      const actEl = document.getElementById(actId);
-      if (actEl) actEl.value = activity || '';
-      const minEl = document.getElementById(minId);
-      if (minEl) minEl.value = String(Number(minutes) || 25);
+      const sel = document.getElementById(activitySelectId);
+      const custom = document.getElementById(activityCustomId);
+      const minsEl = document.getElementById(minutesId);
+      const modeToggle = document.getElementById(modeToggleId);
+      const aiActEl = document.getElementById(aiActivityId);
+      const aiMinEl = document.getElementById(aiMinutesId);
+
+      const presets = ['学习','阅读','写作','工作','运动','冥想'];
+      const currentActivity = (focusState.user.activity || '').trim();
+      const matched = presets.includes(currentActivity);
+      if (sel) sel.value = matched ? currentActivity : '自定义';
+      if (custom) {
+        custom.classList.toggle('hidden', matched);
+        custom.value = matched ? '' : currentActivity;
+      }
+      if (minsEl) minsEl.value = String(Math.max(1, Math.round((focusState.user.durationSec || 1500) / 60)));
+      if (modeToggle) modeToggle.classList.toggle('active', focusState.user.mode === 'up');
+
+      const lock = !!focusState.ai.locked;
+      if (aiActEl) {
+        aiActEl.value = (focusState.ai.activity || '').trim();
+        aiActEl.disabled = lock;
+      }
+      if (aiMinEl) {
+        aiMinEl.value = String(Math.max(1, Math.round((focusState.ai.durationSec || focusState.user.durationSec || 1500) / 60)));
+        aiMinEl.disabled = lock;
+      }
+
+      sel?.addEventListener('change', () => {
+        if (!custom) return;
+        const isCustom = sel.value === '自定义';
+        custom.classList.toggle('hidden', !isCustom);
+        if (isCustom) custom.focus();
+      });
+      modeToggle?.addEventListener('click', () => modeToggle.classList.toggle('active'));
     }, 0);
-  }
-
-  function enableAiFocus({ activity, minutes }) {
-    const m = Math.max(1, Math.min(999, Number(minutes) || 25));
-    focusState.ai.enabled = true;
-    focusState.ai.activity = (activity || '').trim() || '陪你专注';
-    focusState.ai.durationSec = Math.round(m * 60);
-    focusState.ai.remainingSec = focusState.ai.durationSec;
-    focusState.ai.running = true;
-    focusState.ai.startRemainingSec = focusState.ai.remainingSec;
-    focusState.ai.lastStartTs = Date.now();
-    saveFocusState();
-    syncFocusUI();
-    ensureFocusTicker();
-  }
-
-  function editAiFocus({ activity, minutes }) {
-    enableAiFocus({ activity, minutes });
-  }
-
-  function removeAiFocus() {
-    focusState.ai.enabled = false;
-    focusState.ai.running = false;
-    saveFocusState();
-    syncFocusUI();
   }
 
   // ---------- 通用弹窗逻辑 ----------
@@ -1587,45 +1728,15 @@
     characterIcon.addEventListener('click', ()=>setActiveView('character'));
     dataManagerIcon.addEventListener('click', ()=>setActiveView('data'));
 
-    focusActivitySelect?.addEventListener('change', () => {
-      if (focusActivitySelect.value === '自定义') {
-        focusCustomActivityInput?.classList.remove('hidden');
-        focusCustomActivityInput?.focus();
-        setUserFocusActivity(focusCustomActivityInput?.value || focusState.user.activity);
-      } else {
-        focusCustomActivityInput?.classList.add('hidden');
-        setUserFocusActivity(focusActivitySelect.value);
-      }
+    focusMenuBtn?.addEventListener('click', toggleMobileSidebar);
+    focusSettingsBtn?.addEventListener('click', openFocusSettingsDialog);
+    focusModeToggle?.addEventListener('click', () => {
+      focusModeToggle.classList.toggle('active');
+      setUserFocusMode(focusModeToggle.classList.contains('active') ? 'up' : 'down');
     });
-    focusCustomActivityInput?.addEventListener('input', () => {
-      if (focusActivitySelect?.value === '自定义') setUserFocusActivity(focusCustomActivityInput.value);
-    });
-    focusMinutesInput?.addEventListener('change', () => setUserFocusMinutes(focusMinutesInput.value));
     focusStartBtn?.addEventListener('click', startUserFocus);
     focusStopBtn?.addEventListener('click', stopUserFocus);
     focusResetBtn?.addEventListener('click', resetUserFocus);
-    focusInviteAiBtn?.addEventListener('click', () => {
-      const defaultActivity = `陪你一起${focusState.user.activity || '专注'}`;
-      const defaultMinutes = Math.max(1, Math.round((focusState.user.durationSec || 1500) / 60));
-      openAiEditDialog({
-        title: '邀请 AI 加入专注',
-        activity: defaultActivity,
-        minutes: defaultMinutes,
-        confirmText: '加入',
-        onConfirm: ({ activity, minutes }) => enableAiFocus({ activity, minutes })
-      });
-    });
-    focusEditAiBtn?.addEventListener('click', () => {
-      const minutes = Math.max(1, Math.round((focusState.ai.durationSec || 1500) / 60));
-      openAiEditDialog({
-        title: '编辑对方专注',
-        activity: focusState.ai.activity || '陪你专注',
-        minutes,
-        confirmText: '保存',
-        onConfirm: ({ activity, minutes }) => editAiFocus({ activity, minutes })
-      });
-    });
-    focusRemoveAiBtn?.addEventListener('click', removeAiFocus);
 
     saveCharacterBtn.addEventListener('click', saveCharacterToStorage);
     resetCharacterBtn.addEventListener('click', ()=>{
