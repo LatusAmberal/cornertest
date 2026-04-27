@@ -49,10 +49,11 @@
         <!-- 聊天视图 -->
         <div class="chat-view" id="chatView">
             <header class="chat-header">
-                <div class="header-left"></div>
+                <div class="header-left">
+                    <button class="menu-btn mobile-only" id="mobileMenuBtn" title="返回菜单"><i class="fas fa-bars"></i></button>
+                </div>
                 <div class="chat-title" id="chatTitleDisplay">✨ 青绿角色</div>
                 <div class="header-right">
-                    <button class="menu-btn mobile-only" id="mobileMenuBtn" title="返回菜单"><i class="fas fa-bars"></i></button>
                     <button class="menu-btn" id="configMenuBtn" title="API 设置 · 主题切换"><i class="fas fa-ellipsis-h"></i></button>
                 </div>
             </header>
@@ -169,7 +170,13 @@
 
         <!-- 专注视图 -->
         <div class="focus-view" id="focusView">
-            <h2 class="mb-20 fw-500"><i class="fas fa-hourglass-half mr-12"></i>专注</h2>
+            <header class="chat-header focus-header">
+                <div class="header-left">
+                    <button class="menu-btn mobile-only" id="focusMenuBtn" title="返回菜单"><i class="fas fa-arrow-left"></i></button>
+                </div>
+                <div class="chat-title">专注</div>
+                <div class="header-right"></div>
+            </header>
 
             <div class="settings-card">
                 <h3><i class="fas fa-bullseye"></i> 我的专注</h3>
@@ -177,24 +184,15 @@
                     <div class="focus-timer" id="focusUserTimerDisplay">25:00</div>
                     <div class="focus-meta">
                         <div class="focus-activity" id="focusUserActivityDisplay">学习</div>
-                        <div class="flex-gap-12 mt-12 flex-wrap">
-                            <select id="focusActivitySelect" class="flex-1">
-                                <option value="学习" selected>学习</option>
-                                <option value="阅读">阅读</option>
-                                <option value="写作">写作</option>
-                                <option value="工作">工作</option>
-                                <option value="运动">运动</option>
-                                <option value="冥想">冥想</option>
-                                <option value="自定义">自定义…</option>
-                            </select>
-                            <input type="text" id="focusCustomActivityInput" class="hidden flex-1" placeholder="输入自定义活动…">
-                            <input type="number" id="focusMinutesInput" min="1" max="999" value="25" class="w-120" title="分钟">
+                        <div class="flex-between mt-12">
+                            <span class="theme-toggle-label"><i class="fas fa-stopwatch"></i> 倒计时 / 正计时</span>
+                            <div class="apple-toggle" id="focusModeToggle"></div>
                         </div>
                         <div class="flex-gap-12 mt-16 flex-wrap">
+                            <button class="btn btn-secondary" id="focusSettingsBtn"><i class="fas fa-sliders-h mr-8"></i>选择活动</button>
                             <button class="btn btn-primary" id="focusStartBtn"><i class="fas fa-play mr-8"></i>开始</button>
                             <button class="btn btn-secondary" id="focusStopBtn"><i class="fas fa-pause mr-8"></i>暂停</button>
                             <button class="btn btn-secondary" id="focusResetBtn"><i class="fas fa-undo-alt mr-8"></i>重置</button>
-                            <button class="btn btn-secondary" id="focusInviteAiBtn"><i class="fas fa-user-plus mr-8"></i>邀请AI加入</button>
                         </div>
                     </div>
                 </div>
@@ -206,10 +204,7 @@
                     <div class="focus-timer" id="focusAiTimerDisplay">25:00</div>
                     <div class="focus-meta">
                         <div class="focus-activity" id="focusAiActivityDisplay">陪你专注</div>
-                        <div class="flex-gap-12 mt-16 flex-wrap">
-                            <button class="btn btn-secondary" id="focusEditAiBtn"><i class="fas fa-pen mr-8"></i>编辑对方</button>
-                            <button class="btn btn-secondary" id="focusRemoveAiBtn"><i class="fas fa-times mr-8"></i>移除</button>
-                        </div>
+                        <div class="mt-8 fs-13 text-secondary">对方会在你开始专注后自动开始，之后不受你控制。</div>
                     </div>
                 </div>
             </div>
