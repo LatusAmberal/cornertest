@@ -1493,24 +1493,11 @@
             const close = () => commonDialogOverlay.classList.remove('show');
 
             endOnlyMeBtn?.addEventListener('click', () => {
-                stopUserFocus(); // 只停止自己
+                resetUserOnly(); // 只停止自己
                 close();
             });
             endBothBtn?.addEventListener('click', () => {
-                stopUserFocus();
-                if (focusState.ai.enabled && focusState.ai.running) {
-                    focusState.ai.running = false;
-                    focusState.ai.lastStartTs = 0;
-                    if (focusState.ai.mode === 'up') {
-                        focusState.ai.elapsedSec = computeUpElapsed(focusState.ai);
-                        focusState.ai.startElapsedSec = focusState.ai.elapsedSec || 0;
-                    } else {
-                        focusState.ai.remainingSec = computeDownRemaining(focusState.ai);
-                        focusState.ai.startRemainingSec = focusState.ai.remainingSec;
-                    }
-                    saveFocusState();
-                    syncFocusUI();
-                }
+                resetUserFocus();
                 close();
             });
             dialogCancelBtn.onclick = close;
@@ -1537,6 +1524,38 @@
             }
         });
     }
+  }
+
+  function resetUserOnly() {
+    focusState.user.running = false;
+    focusState.user.lastStartTs = 0;
+    if (focusState.user.mode === 'up') {
+        focusState.user.elapsedSec = 0;
+        focusState.user.startElapsedSec = 0;
+    } else {
+        focusState.user.remainingSec = focusState.user.durationSec;
+        focusState.user.startRemainingSec = focusState.user.remainingSec;
+    }
+    // 不碰 AI 的任何状态
+    saveFocusState();
+    syncFocusUI();
+  }
+
+  function endAiFocus() {
+    if (!focusState.ai.enabled || !focusState.ai.running) return;
+    focusState.ai.running = false;
+    focusState.ai.lastStartTs = 0;
+    // 重置对方计时
+    if (focusState.ai.mode === 'up') {
+        focusState.ai.elapsedSec = 0;
+        focusState.ai.startElapsedSec = 0;
+    } else {
+        focusState.ai.remainingSec = focusState.ai.durationSec;
+        focusState.ai.startRemainingSec = focusState.ai.remainingSec;
+    }
+    // 保持 enabled 和 locked 不变，以便下次还能邀请
+    saveFocusState();
+    syncFocusUI();
   }
 
   function resetUserFocus() {
@@ -1932,6 +1951,9 @@
     });
     focusStartBtn?.addEventListener('click', startUserFocus);
     focusStopBtn?.addEventListener('click', stopUserFocus);
+
+    const endAiFocusBtn = document.getElementById('endAiFocusBtn');
+    endAiFocusBtn?.addEventListener('click', endAiFocus);
     // 将重置按钮改为结束按钮
     if (focusResetBtn) {
         focusResetBtn.innerHTML = '<i class="fas fa-stop"></i> 结束';
