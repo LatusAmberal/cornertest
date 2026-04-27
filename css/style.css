@@ -1164,29 +1164,6 @@ body {
     flex-shrink: 0;
 }
 
-.profile-banner-edit-btn {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.5);
-    color: white;
-    border: none;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-    z-index: 10;
-}
-
-.profile-banner-edit-btn:hover {
-    background: rgba(0, 0, 0, 0.7);
-    transform: scale(1.1);
-}
-
 /* 半透明蒙版 —— 保证文字在任何背景图下都能阅读 */
 .profile-banner::before {
     content: '';
@@ -1226,32 +1203,8 @@ body.light-theme .profile-banner::before {
     color: white;
     border: 4px solid var(--accent);
     box-shadow: 0 0 0 3px var(--bg-chat-main), 0 4px 12px rgba(0,0,0,0.3);
-    overflow: visible; /* 允许编辑按钮溢出 */
+    overflow: hidden;
     flex-shrink: 0;
-}
-
-.profile-avatar-edit-btn {
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: var(--accent);
-    color: white;
-    border: 2px solid var(--bg-chat-main);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-    transition: all 0.2s;
-    z-index: 10;
-}
-
-.profile-avatar-edit-btn:hover {
-    transform: scale(1.1);
-    filter: brightness(1.1);
 }
 .profile-avatar-large img {
     width: 100%;
