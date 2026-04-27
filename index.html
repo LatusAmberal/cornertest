@@ -28,7 +28,7 @@
 <body>
 <div class="app">
     <!-- 左侧菜单 -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
         <div class="sidebar-icon active" title="当前对话"><i class="fas fa-comment-dots"></i></div>
         <div class="sidebar-icon" title="人物管理" id="characterIcon"><i class="fas fa-user-tag"></i></div>
         <div class="sidebar-divider"></div>
@@ -41,6 +41,7 @@
             </div>
         </div>
     </aside>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
     <!-- 聊天主体 -->
     <main class="chat-main" id="chatMain">
@@ -50,6 +51,7 @@
                 <div class="header-left"></div>
                 <div class="chat-title" id="chatTitleDisplay">✨ 青绿角色</div>
                 <div class="header-right">
+                    <button class="menu-btn mobile-only" id="mobileMenuBtn" title="返回菜单"><i class="fas fa-bars"></i></button>
                     <button class="menu-btn" id="configMenuBtn" title="API 设置 · 主题切换"><i class="fas fa-ellipsis-h"></i></button>
                 </div>
             </header>
