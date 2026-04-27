@@ -1370,6 +1370,38 @@
         }
       }
 
+      // 上限检查（3小时）
+    function enforceTimeLimit(timer, owner) {
+        const maxSec = 3 * 60 * 60;
+        let elapsed = 0;
+        if (timer.mode === 'up') {
+            elapsed = computeUpElapsed(timer);
+        } else {
+            elapsed = (timer.durationSec || 0) - (timer.running ? computeDownRemaining(timer) : timer.remainingSec);
+        }
+        if (elapsed >= maxSec) {
+            timer.running = false;
+            timer.lastStartTs = 0;
+            if (timer.mode === 'up') {
+                timer.elapsedSec = maxSec;
+                timer.startElapsedSec = maxSec;
+            } else {
+                timer.remainingSec = 0;
+                timer.startRemainingSec = 0;
+            }
+            if (owner === 'ai') {
+                sendFocusEndMessage();
+            }
+            saveFocusState();
+            return true; // 表示已强制结束
+        }
+        return false;
+    }
+
+    // 在 setInterval 回调中调用
+    if (focusState.user.running) enforceTimeLimit(focusState.user, 'user');
+    if (focusState.ai.enabled && focusState.ai.running) enforceTimeLimit(focusState.ai, 'ai');
+
       syncFocusUI();
     }, 250);
   }
@@ -1381,6 +1413,9 @@
     focusState.ai.mode = focusState.user.mode;
     focusState.ai.activity = (focusState.ai.activity || '').trim() || `陪你一起${focusState.user.activity || '专注'}`;
     if (!focusState.ai.durationSec || focusState.ai.durationSec <= 0) focusState.ai.durationSec = focusState.user.durationSec;
+    // 上限3小时
+    const maxSec = 3 * 60 * 60;
+    if (focusState.ai.durationSec > maxSec) focusState.ai.durationSec = maxSec;
 
     focusState.ai.running = true;
     focusState.ai.lastStartTs = Date.now();
@@ -1395,18 +1430,27 @@
 
   function startUserFocus() {
     if (focusState.user.running) return;
+
     focusState.user.running = true;
     focusState.user.lastStartTs = Date.now();
     if (focusState.user.mode === 'up') {
-      focusState.user.startElapsedSec = Math.max(0, focusState.user.elapsedSec || 0);
+        focusState.user.startElapsedSec = Math.max(0, focusState.user.elapsedSec || 0);
     } else {
-      const rem = computeDownRemaining(focusState.user);
-      if (rem <= 0) focusState.user.remainingSec = focusState.user.durationSec;
-      focusState.user.startRemainingSec = focusState.user.remainingSec;
+        const rem = computeDownRemaining(focusState.user);
+        if (rem <= 0) focusState.user.remainingSec = focusState.user.durationSec;
+        focusState.user.startRemainingSec = focusState.user.remainingSec;
     }
+
     if (focusState.ai.enabled) {
-        startAiFocusAuto();
+        // 20% 概率被拒绝
+        if (Math.random() < 0.2) {
+            addMessage('assistant', '抱歉，我现在有点事情，没法陪你一起专注……');
+            focusState.ai.running = false;
+        } else {
+            startAiFocusAuto();
+        }
     }
+
     saveFocusState();
     syncFocusUI();
     ensureFocusTicker();
@@ -1423,6 +1467,76 @@
     // 注意：这里不停止对方的计时，对方继续自主运行
     saveFocusState();
     syncFocusUI();
+  }
+
+  function endUserFocus() {
+    const userRunning = focusState.user.running;
+    const aiRunning = focusState.ai.enabled && focusState.ai.running;
+    if (!userRunning && !aiRunning) return;
+
+    if (userRunning && aiRunning) {
+        showCommonDialog({
+            title: '结束专注',
+            message: '确定要结束自己的专注吗？对方可能仍在专注中。',
+            customBody: `<div class="flex-gap-12 mt-8">
+                <button class="btn btn-secondary" id="endOnlyMeBtn">只结束自己</button>
+                <button class="btn btn-warning" id="endBothBtn">同时结束双方</button>
+            </div>`,
+            showCancel: true,
+            confirmText: '', // 隐藏默认确定按钮
+            onConfirm: null
+        });
+
+        setTimeout(() => {
+            const endOnlyMeBtn = document.getElementById('endOnlyMeBtn');
+            const endBothBtn = document.getElementById('endBothBtn');
+            const close = () => commonDialogOverlay.classList.remove('show');
+
+            endOnlyMeBtn?.addEventListener('click', () => {
+                stopUserFocus(); // 只停止自己
+                close();
+            });
+            endBothBtn?.addEventListener('click', () => {
+                stopUserFocus();
+                if (focusState.ai.enabled && focusState.ai.running) {
+                    focusState.ai.running = false;
+                    focusState.ai.lastStartTs = 0;
+                    if (focusState.ai.mode === 'up') {
+                        focusState.ai.elapsedSec = computeUpElapsed(focusState.ai);
+                        focusState.ai.startElapsedSec = focusState.ai.elapsedSec || 0;
+                    } else {
+                        focusState.ai.remainingSec = computeDownRemaining(focusState.ai);
+                        focusState.ai.startRemainingSec = focusState.ai.remainingSec;
+                    }
+                    saveFocusState();
+                    syncFocusUI();
+                }
+                close();
+            });
+            dialogCancelBtn.onclick = close;
+        }, 0);
+    } else if (userRunning) {
+        stopUserFocus();
+    } else if (aiRunning) {
+        showCommonDialog({
+            title: '结束对方的专注',
+            message: '确定要结束对方的专注吗？',
+            confirmText: '确定结束',
+            onConfirm: () => {
+                focusState.ai.running = false;
+                focusState.ai.lastStartTs = 0;
+                if (focusState.ai.mode === 'up') {
+                    focusState.ai.elapsedSec = computeUpElapsed(focusState.ai);
+                    focusState.ai.startElapsedSec = focusState.ai.elapsedSec || 0;
+                } else {
+                    focusState.ai.remainingSec = computeDownRemaining(focusState.ai);
+                    focusState.ai.startRemainingSec = focusState.ai.remainingSec;
+                }
+                saveFocusState();
+                syncFocusUI();
+            }
+        });
+    }
   }
 
   function resetUserFocus() {
@@ -1464,7 +1578,7 @@
   }
 
   function setUserFocusMinutes(minutes) {
-    const m = Math.max(1, Math.min(999, Number(minutes) || 25));
+    const m = Math.max(1, Math.min(180, Number(minutes) || 25)); // 限制最大180分钟
     stopUserFocus();
     focusState.user.durationSec = Math.round(m * 60);
     if (focusState.user.mode === 'up') {
@@ -1514,7 +1628,7 @@
       </div>
       <div class="config-group">
         <label>我的时间（分钟）</label>
-        <input type="number" id="${minutesId}" min="1" max="999">
+        <input type="number" id="${minutesId}" min="1" max="180">
       </div>
       <div class="theme-toggle-row">
         <span class="theme-toggle-label"><i class="fas fa-stopwatch"></i> 倒计时 / 正计时</span>
@@ -1530,10 +1644,11 @@
         <div class="config-group mt-16">
           <label>对方活动（开始后不可修改）</label>
           <input type="text" id="${aiActivityId}" placeholder="例如：陪你专注 / 看书 / 写作">
+          <button class="btn btn-sm btn-secondary mt-8" id="aiSuggestBtn" type="button"><i class="fas fa-magic"></i> AI 建议</button>
         </div>
         <div class="config-group">
           <label>对方时间（分钟，开始后不可修改）</label>
-          <input type="number" id="${aiMinutesId}" min="1" max="999">
+          <input type="number" id="${aiMinutesId}" min="1" max="180">
         </div>
         <div class="fs-13 text-secondary mt-8">对方会在你开始专注后自动开始，之后不受你控制。</div>
       </div>
@@ -1610,6 +1725,29 @@
                 const enabled = inviteToggle.classList.contains('active');
                 if (aiSettingsContainer) {
                     aiSettingsContainer.style.display = enabled ? 'block' : 'none';
+                }
+            });
+        }
+
+        const aiSuggestBtn = document.getElementById('aiSuggestBtn');
+        if (aiSuggestBtn) {
+            aiSuggestBtn.addEventListener('click', async () => {
+                const aiActivityInput = document.getElementById(aiActivityId);
+                const aiMinutesInput = document.getElementById(aiMinutesId);
+                if (!aiActivityInput) return;
+                try {
+                    const reply = await callAI(
+                        '请根据你的角色设定，为专注活动推荐一个简短的名称和适当的时长（分钟，范围10-180）。只返回JSON格式：{"activity":"活动名","minutes":数字}',
+                        '你是一个角色扮演AI，只需输出JSON。'
+                    );
+                    const json = JSON.parse(reply.trim());
+                    if (json.activity && typeof json.minutes === 'number') {
+                        aiActivityInput.value = json.activity;
+                        aiMinutesInput.value = Math.max(10, Math.min(180, json.minutes));
+                    }
+                } catch(e) {
+                    aiActivityInput.value = '陪你专注';
+                    aiMinutesInput.value = '25';
                 }
             });
         }
@@ -1794,7 +1932,11 @@
     });
     focusStartBtn?.addEventListener('click', startUserFocus);
     focusStopBtn?.addEventListener('click', stopUserFocus);
-    focusResetBtn?.addEventListener('click', resetUserFocus);
+    // 将重置按钮改为结束按钮
+    if (focusResetBtn) {
+        focusResetBtn.innerHTML = '<i class="fas fa-stop"></i> 结束';
+        focusResetBtn.addEventListener('click', endUserFocus);
+    }
 
     saveCharacterBtn.addEventListener('click', saveCharacterToStorage);
     resetCharacterBtn.addEventListener('click', ()=>{
