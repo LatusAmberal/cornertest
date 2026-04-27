@@ -1335,16 +1335,17 @@
   function ensureFocusTicker() {
     if (focusTickerId) return;
     focusTickerId = setInterval(() => {
-      const userRunning = !!focusState.user.running;
-      const aiRunning = !!(focusState.ai.enabled && focusState.ai.running);
+        const userRunning = !!focusState.user.running;
+        const aiRunning = !!(focusState.ai.enabled && focusState.ai.running);
 
-      if (!userRunning && !aiRunning) {
-        clearInterval(focusTickerId);
-        focusTickerId = null;
-        syncFocusUI();
-        saveFocusState();
-        return;
-      }
+        // 只要还有一个在运行，就继续滴答
+        if (!userRunning && !aiRunning) {
+            clearInterval(focusTickerId);
+            focusTickerId = null;
+            syncFocusUI();
+            saveFocusState();
+            return;
+        }
 
       if (focusState.user.running && focusState.user.mode !== 'up') {
         const uRem = computeDownRemaining(focusState.user);
@@ -1359,10 +1360,13 @@
       if (focusState.ai.enabled && focusState.ai.running && focusState.ai.mode !== 'up') {
         const aRem = computeDownRemaining(focusState.ai);
         if (aRem <= 0) {
-          focusState.ai.running = false;
-          focusState.ai.remainingSec = 0;
-          focusState.ai.lastStartTs = 0;
-          focusState.ai.startRemainingSec = 0;
+            focusState.ai.running = false;
+            focusState.ai.remainingSec = 0;
+            focusState.ai.lastStartTs = 0;
+            focusState.ai.startRemainingSec = 0;
+            // 对方自主结束，发送消息
+            sendFocusEndMessage();
+            saveFocusState();
         }
       }
 
@@ -1416,6 +1420,7 @@
     focusState.user.lastStartTs = 0;
     focusState.user.startRemainingSec = focusState.user.remainingSec;
     focusState.user.startElapsedSec = focusState.user.elapsedSec || 0;
+    // 注意：这里不停止对方的计时，对方继续自主运行
     saveFocusState();
     syncFocusUI();
   }
@@ -1424,14 +1429,32 @@
     focusState.user.running = false;
     focusState.user.lastStartTs = 0;
     if (focusState.user.mode === 'up') {
-      focusState.user.elapsedSec = 0;
-      focusState.user.startElapsedSec = 0;
+        focusState.user.elapsedSec = 0;
+        focusState.user.startElapsedSec = 0;
     } else {
-      focusState.user.remainingSec = focusState.user.durationSec;
-      focusState.user.startRemainingSec = focusState.user.remainingSec;
+        focusState.user.remainingSec = focusState.user.durationSec;
+        focusState.user.startRemainingSec = focusState.user.remainingSec;
+    }
+
+    // 重置对方（停止并恢复初始状态）
+    if (focusState.ai.enabled) {
+        focusState.ai.running = false;
+        focusState.ai.lastStartTs = 0;
+        if (focusState.ai.mode === 'up') {
+            focusState.ai.elapsedSec = 0;
+            focusState.ai.startElapsedSec = 0;
+        } else {
+            focusState.ai.remainingSec = focusState.ai.durationSec;
+            focusState.ai.startRemainingSec = focusState.ai.remainingSec;
+        }
     }
     saveFocusState();
     syncFocusUI();
+  }
+
+  function sendFocusEndMessage() {
+    // 当对方自主完成专注时发送一条消息
+    addMessage('assistant', '我结束了专注');
   }
 
   function setUserFocusActivity(activity) {
