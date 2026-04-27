@@ -146,16 +146,8 @@
         <!-- 个人主页视图 -->
         <div class="profile-view" id="profileView">
             <div class="profile-banner">
-                <button class="profile-banner-edit-btn" id="directUploadCoverBtn" title="修改背景图">
-                    <i class="fas fa-camera"></i>
-                </button>
                 <div class="profile-banner-content">
-                    <div class="profile-avatar-large" id="profileAvatarLarge">
-                        <i class="fas fa-user"></i>
-                        <button class="profile-avatar-edit-btn" id="directUploadAvatarBtn" title="修改头像">
-                            <i class="fas fa-camera"></i>
-                        </button>
-                    </div>
+                    <div class="profile-avatar-large" id="profileAvatarLarge"><i class="fas fa-user"></i></div>
                     <div class="profile-info">
                         <h2 id="profileDisplayName">用户</h2>
                         <p id="profileBioDisplay"><i class="fas fa-quote-left mr-8"></i>在一隅，遇见自己。</p>
@@ -310,7 +302,7 @@
     </main>
 
     <!-- 图片裁剪模态框 -->
-    <div class="modal-overlay" id="cropModalOverlay" style="display: none;">
+    <div class="modal-overlay" id="cropModalOverlay">
         <div class="modal-container">
             <div class="modal-header">
                 <h3>调整图片</h3>
@@ -329,7 +321,7 @@
     </div>
 
     <!-- 编辑个人资料模态框 -->
-    <div class="modal-overlay" id="editProfileModalOverlay" style="display: none;">
+    <div class="modal-overlay" id="editProfileModalOverlay">
         <div class="modal-container w-450">
             <div class="modal-header">
                 <h3>编辑个人资料</h3>
@@ -367,7 +359,7 @@
     </div>
 
     <!-- 批量发送模态框 -->
-    <div class="modal-overlay" id="batchSendModalOverlay" style="display: none;">
+    <div class="modal-overlay" id="batchSendModalOverlay">
         <div class="modal-container w-450">
             <div class="modal-header">
                 <h3>批量发送</h3>
