@@ -61,13 +61,13 @@
   const focusModeToggle = document.getElementById('focusModeToggle');
   const focusSettingsBtn = document.getElementById('focusSettingsBtn');
   const focusStartBtn = document.getElementById('focusStartBtn');
-  const focusStopBtn = document.getElementById('focusStopBtn');
   const focusResetBtn = document.getElementById('focusResetBtn');
   const inviteToggleMain = document.getElementById('inviteToggleMain');
   const focusAiCard = document.getElementById('focusAiCard');
   const focusAiTimerDisplay = document.getElementById('focusAiTimerDisplay');
   const focusAiActivityDisplay = document.getElementById('focusAiActivityDisplay');
   const editAiFocusBtn = document.getElementById('editAiFocusBtn');
+  const endAiFocusBtn = document.getElementById('endAiFocusBtn');
 
   const commonDialogOverlay = document.getElementById('commonDialogOverlay');
   const dialogTitle = document.getElementById('dialogTitle');
@@ -216,7 +216,7 @@
       </div>
       <div class="chat-prefs-info">
         已读不回：已读后 AI 可能不回复（晚安等类似场景更易触发）。<br>
-        长时间未读：AI 可能在说出“稍等”等理由后暂时不读你的消息。
+        长时间未读：AI 可能在说出"稍等"等理由后暂时不读你的消息。
       </div>
     `;
     const clearBtnContainer = document.querySelector('.drawer-content > div:first-child');
@@ -243,18 +243,35 @@
       longUnreadToggle.classList.toggle('active', chatPreferences.enableLongUnread);
       saveChatPreferences();
     });
+    // 滑动条填充色动态更新
+    function updateSliderFill(slider) {
+      if (!slider) return;
+      const min = Number(slider.min) || 0;
+      const max = Number(slider.max) || 100;
+      const val = Number(slider.value) || 0;
+      const pct = ((val - min) / (max - min)) * 100;
+      slider.style.background = `linear-gradient(to right, var(--accent) ${pct}%, var(--border-strong) ${pct}%)`;
+    }
+
     readIgnoreProbSlider?.addEventListener('input', (e) => {
       chatPreferences.readIgnoreProbability = parseInt(e.target.value);
       readIgnoreProbVal.textContent = chatPreferences.readIgnoreProbability + '%';
+      updateSliderFill(e.target);
       saveChatPreferences();
     });
     longUnreadProbSlider?.addEventListener('input', (e) => {
       chatPreferences.longUnreadProbability = parseInt(e.target.value);
       longUnreadProbVal.textContent = chatPreferences.longUnreadProbability + '%';
+      updateSliderFill(e.target);
       saveChatPreferences();
     });
 
     loadChatPreferences();
+    // 初始化填充色
+    setTimeout(() => {
+      updateSliderFill(document.getElementById('readIgnoreProbSlider'));
+      updateSliderFill(document.getElementById('longUnreadProbSlider'));
+    }, 0);
   }
 
   // ---------- 配置管理 ----------
@@ -696,52 +713,119 @@
   function updateExampleBubbles() {
     const container = document.getElementById('exampleBubblePreview');
     if (!container) return;
-    const text = charExamplesInput.value.trim();
+    const text = charExamplesInput ? charExamplesInput.value.trim() : '';
     const lines = text.split('\n').filter(l => l.trim());
 
-    let bubblesHtml = lines.map(line => {
+    container.innerHTML = '';
+
+    lines.forEach((line, idx) => {
       let role = 'assistant';
       let content = line;
+      let prefix = '';
       if (line.startsWith('用户：') || line.startsWith('User:')) {
         role = 'user';
+        prefix = line.startsWith('用户：') ? '用户：' : 'User:';
         content = line.replace(/^(用户：|User:)/, '');
       } else if (line.startsWith('角色：') || line.startsWith('Assistant:') || line.startsWith('Bot:')) {
         role = 'assistant';
+        prefix = line.startsWith('角色：') ? '角色：' : (line.startsWith('Assistant:') ? 'Assistant:' : 'Bot:');
         content = line.replace(/^(角色：|Assistant:|Bot:)/, '');
+      } else {
+        prefix = '';
       }
 
-      const safe = escapeHtml(content);
-      const alignClass = role === 'user' ? 'flex-end' : 'flex-start';
       const bubbleClass = role === 'user' ? 'user' : 'assistant';
 
-      return `
-        <div class="message-row ${alignClass}">
-          <div class="example-bubble ${bubbleClass}">
-            ${safe}
-          </div>
-        </div>
-      `;
-    }).join('');
+      const row = document.createElement('div');
+      // 使用与主聊天界面完全一致的 message-row user/assistant 类
+      row.className = `message-row ${bubbleClass}`;
+      row.style.alignItems = 'center';
+      row.style.gap = '6px';
 
-    // 添加“+”按钮
-    const addBtnHtml = `
-      <div class="flex-center mt-10">
-        <button class="btn btn-secondary btn-sm" onclick="addExampleGroup()">
-          <i class="fas fa-plus mr-5"></i> 添加一组对话
-        </button>
-      </div>
+      // 气泡（可点击编辑）
+      const bubble = document.createElement('div');
+      bubble.className = `example-bubble ${bubbleClass} editable-bubble`;
+      bubble.title = '点击编辑';
+      bubble.textContent = content;
+      bubble.dataset.idx = idx;
+      bubble.dataset.prefix = prefix;
+
+      bubble.addEventListener('click', () => {
+        if (bubble.querySelector('textarea')) return; // 已在编辑
+        const ta = document.createElement('textarea');
+        ta.className = 'bubble-inline-editor';
+        ta.value = content;
+        ta.rows = Math.max(1, content.split('\n').length);
+        bubble.textContent = '';
+        bubble.appendChild(ta);
+        ta.focus();
+        ta.select();
+
+        const commit = () => {
+          const newVal = ta.value.trim();
+          const allLines = charExamplesInput.value.split('\n');
+          allLines[idx] = prefix + newVal;
+          charExamplesInput.value = allLines.join('\n');
+          content = newVal;
+          updateExampleBubbles();
+        };
+        ta.addEventListener('blur', commit);
+        ta.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); }
+          if (e.key === 'Escape') { bubble.textContent = content; }
+        });
+      });
+
+      // 删除按钮
+      const delBtn = document.createElement('button');
+      delBtn.className = 'bubble-del-btn';
+      delBtn.title = '删除此行';
+      delBtn.innerHTML = '<i class="fas fa-times"></i>';
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const allLines = charExamplesInput.value.split('\n');
+        allLines.splice(idx, 1);
+        charExamplesInput.value = allLines.join('\n');
+        updateExampleBubbles();
+      });
+
+      if (role === 'user') {
+        row.appendChild(delBtn);
+        row.appendChild(bubble);
+      } else {
+        row.appendChild(bubble);
+        row.appendChild(delBtn);
+      }
+
+      container.appendChild(row);
+    });
+
+    // 添加"+"按钮
+    const addRow = document.createElement('div');
+    addRow.className = 'flex-center mt-10';
+    addRow.innerHTML = `
+      <button class="btn btn-secondary btn-sm" onclick="addExampleGroup()">
+        <i class="fas fa-plus mr-5"></i> 添加一组对话
+      </button>
     `;
+    container.appendChild(addRow);
 
-    container.innerHTML = bubblesHtml + addBtnHtml;
+    // 提示（仅无内容时显示）
+    if (lines.length === 0) {
+      const hint = document.createElement('div');
+      hint.className = 'fs-13 text-secondary mt-8';
+      hint.style.textAlign = 'center';
+      hint.textContent = '点击「添加一组对话」开始，然后点击气泡直接编辑内容';
+      container.insertBefore(hint, addRow);
+    }
   }
 
   window.addExampleGroup = function() {
-    const currentText = charExamplesInput.value.trim();
+    const currentText = charExamplesInput ? charExamplesInput.value.trim() : '';
     const newGroup = (currentText ? '\n' : '') + "用户：你好\n角色：你好，有什么我可以帮你的吗？";
-    charExamplesInput.value = currentText + newGroup;
+    if (charExamplesInput) charExamplesInput.value = currentText + newGroup;
     updateExampleBubbles();
-    // 自动触发一次输入事件以同步其他逻辑
-    charExamplesInput.dispatchEvent(new Event('input'));
+    if (charExamplesInput) charExamplesInput.dispatchEvent(new Event('input'));
   };
 
   charMemoriesInput?.addEventListener('input', updateMemoriesCards);
@@ -831,8 +915,8 @@
     ${charInfo}
 
     【核心指令】
-    1. 你必须完全遵守上述“对话风格”和“对话示例”，将其视为唯一的交流方式，不得偏离。
-    2. 禁止主动提及当前时间、年份、日期、季节等具体时间信息。你只需要根据对话上下文确认早晚、是否周末等模糊时间概念，但绝不能出现“2026年”、“今天4月26日”等具体描述。
+    1. 你必须完全遵守上述"对话风格"和"对话示例"，将其视为唯一的交流方式，不得偏离。
+    2. 禁止主动提及当前时间、年份、日期、季节等具体时间信息。你只需要根据对话上下文确认早晚、是否周末等模糊时间概念，但绝不能出现"2026年"、"今天4月26日"等具体描述。
     3. 像真人一样聊天，禁止使用括号描述动作，例如（微笑）、（叹气）等。
     4. 保持角色一致性，不要出戏。
             `.trim()
@@ -1024,9 +1108,11 @@
 
   function openSidebar() {
     document.body.classList.add('sidebar-open');
+    if (globalMenuBtn) globalMenuBtn.style.display = 'none';
   }
   function closeSidebar() {
     document.body.classList.remove('sidebar-open');
+    if (globalMenuBtn) globalMenuBtn.style.display = '';
   }
   function toggleSidebar() {
     if (document.body.classList.contains('sidebar-open')) closeSidebar();
@@ -1323,22 +1409,42 @@
       const hasProgress = focusState.user.mode === 'up'
         ? (Number(focusState.user.elapsedSec) > 0)
         : (Number(focusState.user.remainingSec) > 0 && Number(focusState.user.remainingSec) < Number(focusState.user.durationSec || 0));
-      const label = focusState.user.running ? '进行中' : (hasProgress ? '继续' : '开始');
-      focusStartBtn.innerHTML = `<i class="fas fa-play mr-8"></i>${label}`;
-      focusStartBtn.disabled = focusState.user.running;
+
+      if (focusState.user.running) {
+        // 正在运行：按钮变为「暂停」
+        focusStartBtn.innerHTML = `<i class="fas fa-pause mr-8"></i>暂停`;
+        focusStartBtn.classList.remove('btn-primary');
+        focusStartBtn.classList.add('btn-secondary');
+        focusStartBtn.disabled = false;
+      } else if (hasProgress) {
+        // 有进度但已暂停：「继续」
+        focusStartBtn.innerHTML = `<i class="fas fa-play mr-8"></i>继续`;
+        focusStartBtn.classList.remove('btn-secondary');
+        focusStartBtn.classList.add('btn-primary');
+        focusStartBtn.disabled = false;
+      } else {
+        // 未开始：「开始」
+        focusStartBtn.innerHTML = `<i class="fas fa-play mr-8"></i>开始`;
+        focusStartBtn.classList.remove('btn-secondary');
+        focusStartBtn.classList.add('btn-primary');
+        focusStartBtn.disabled = false;
+      }
     }
-    if (focusStopBtn) focusStopBtn.disabled = !focusState.user.running;
 
     if (focusAiCard) focusAiCard.style.display = focusState.ai.enabled ? 'block' : 'none';
     if (inviteToggleMain) {
         inviteToggleMain.classList.toggle('active', focusState.ai.enabled);
-        const disabled = focusState.user.running || (focusState.ai.enabled && focusState.ai.running) || !!focusState.ai.locked;
+        const disabled = focusState.ai.enabled && focusState.ai.running || !!focusState.ai.locked;
         inviteToggleMain.style.pointerEvents = disabled ? 'none' : 'auto';
         inviteToggleMain.style.opacity = disabled ? '0.5' : '1';
     }
     if (editAiFocusBtn) editAiFocusBtn.style.display = (focusState.ai.enabled && !focusState.ai.locked) ? 'inline-flex' : 'none';
+    if (endAiFocusBtn) endAiFocusBtn.style.display = (focusState.ai.enabled && focusState.ai.running) ? 'inline-flex' : 'none';
     if (focusAiTimerDisplay) focusAiTimerDisplay.textContent = formatCountdown(computeTimerSeconds(focusState.ai));
     if (focusAiActivityDisplay) focusAiActivityDisplay.textContent = focusState.ai.activity || '专注';
+
+    // ===== 更新专注动画 =====
+    syncFocusAnim();
   }
 
   function ensureFocusTicker() {
@@ -1636,11 +1742,12 @@
         </select>
         <input type="text" id="${activityCustomId}" class="hidden" placeholder="输入自定义活动…">
       </div>
-      <div class="config-group" style="display:${showMinutes ? 'block' : 'none'}">
+      ${showMinutes ? `
+      <div class="config-group" id="focusMinutesGroup">
         <label>我的时间（分钟）</label>
         <input type="number" id="${minutesId}" min="1" max="180">
-      </div>
-      <div class="mt-8 fs-13 text-secondary">对方专注请在主界面“邀请对方一起”中设置。</div>
+      </div>` : ''}
+      <div class="mt-8 fs-13 text-secondary">对方专注请在主界面"邀请对方一起"中设置。</div>
     `;
 
     showCommonDialog({
@@ -1691,17 +1798,22 @@
     const aiSuggestedTimeDisplayId = 'aiInviteTimeDisplay';
     const aiSuggestBtnId = 'aiInviteSuggestBtn';
 
+    // 正计时模式下不显示时间输入框
+    const showMinutes = focusState.user.mode !== 'up';
+
     const body = `
       <div class="config-group">
         <label>对方活动（可手动修改）</label>
         <input type="text" id="${aiActivityId}" placeholder="例如：陪你专注 / 看书 / 写作">
         <button class="btn btn-sm btn-secondary mt-8" id="${aiSuggestBtnId}" type="button"><i class="fas fa-magic"></i> AI 生成</button>
       </div>
+      ${showMinutes ? `
       <div class="config-group">
         <label>对方时间（分钟）</label>
         <input type="number" id="${aiMinutesId}" min="1" max="180">
       </div>
       <div class="mt-8 fs-13 text-secondary" id="${aiSuggestedTimeDisplayId}">对方预计时长：未设置</div>
+      ` : ''}
     `;
 
     showCommonDialog({
@@ -1719,7 +1831,14 @@
         focusState.ai.lastStartTs = 0;
         focusState.ai.mode = focusState.user.mode;
         focusState.ai.activity = aiActivity;
-        focusState.ai.durationSec = Math.round(aiMins * 60);
+        // 正计时模式下时间框不存在，使用当前已存的时长或默认
+        if (showMinutes) {
+          focusState.ai.durationSec = Math.round(aiMins * 60);
+        } else {
+          if (!focusState.ai.durationSec || focusState.ai.durationSec <= 0) {
+            focusState.ai.durationSec = 25 * 60;
+          }
+        }
         if (focusState.ai.mode === 'up') {
           focusState.ai.elapsedSec = 0;
           focusState.ai.startElapsedSec = 0;
@@ -1755,7 +1874,7 @@
       }
 
       const runSuggest = async () => {
-        if (!actEl || !minsEl) return;
+        if (!actEl) return;
         if (suggestBtn) suggestBtn.disabled = true;
         actEl.disabled = true;
         const oldVal = actEl.value;
@@ -1764,14 +1883,14 @@
           const result = await generateAiFocusActivity();
           if (result) {
             actEl.value = result.activity;
-            minsEl.value = String(result.minutes);
+            if (minsEl) minsEl.value = String(result.minutes);
             if (timeDisplay) timeDisplay.textContent = `对方预计时长：${result.minutes} 分钟`;
           } else {
             actEl.value = oldVal || '陪你专注';
           }
         } catch (e) {
           actEl.value = oldVal || '陪你专注';
-          minsEl.value = '25';
+          if (minsEl) minsEl.value = '25';
           if (timeDisplay) timeDisplay.textContent = '对方预计时长：25 分钟';
         } finally {
           actEl.disabled = false;
@@ -1896,6 +2015,7 @@
     loadProfile();
     loadUserImages();
     loadFocusState();
+    loadFocusAnimData();
     normalizeFocusAfterLoad();
     renderMessages();
     buildChatPreferencesUI();
@@ -1916,6 +2036,31 @@
       const avatar = e.target.closest('#userAvatarBtn');
       if (icon || avatar) closeSidebar();
     });
+
+    // ===== 快速回到底部按钮 =====
+    const scrollToBottomBtn = document.getElementById('scrollToBottomBtn');
+    if (messagesArea && scrollToBottomBtn) {
+      // 滚动监听：距离底部超过 120px 时显示按钮
+      messagesArea.addEventListener('scroll', () => {
+        const distFromBottom = messagesArea.scrollHeight - messagesArea.scrollTop - messagesArea.clientHeight;
+        if (distFromBottom > 120) {
+          scrollToBottomBtn.classList.add('visible');
+          scrollToBottomBtn.style.display = '';
+        } else {
+          scrollToBottomBtn.classList.remove('visible');
+          // 动画结束后再 display:none，防止闪烁
+          setTimeout(() => {
+            if (!scrollToBottomBtn.classList.contains('visible')) {
+              scrollToBottomBtn.style.display = 'none';
+            }
+          }, 260);
+        }
+      });
+      // 点击回到底部
+      scrollToBottomBtn.addEventListener('click', () => {
+        messagesArea.scrollTo({ top: messagesArea.scrollHeight, behavior: 'smooth' });
+      });
+    }
     saveConfigBtn.addEventListener('click', ()=>{ applyConfig(); closeDrawer(); });
     testConnectionBtn.addEventListener('click', testConnection);
     clearChatBtn.addEventListener('click', ()=>{
@@ -1944,9 +2089,19 @@
       focusModeToggle.classList.toggle('active');
       setUserFocusMode(focusModeToggle.classList.contains('active') ? 'up' : 'down');
     });
-    focusStartBtn?.addEventListener('click', startUserFocus);
-    focusStopBtn?.addEventListener('click', stopUserFocus);
-    focusResetBtn?.addEventListener('click', resetUserOnly);
+    // 开始按钮：三态切换（开始 → 暂停 → 继续）
+    focusStartBtn?.addEventListener('click', () => {
+      if (focusState.user.running) {
+        stopUserFocus();
+      } else {
+        startUserFocus();
+      }
+    });
+    focusResetBtn?.addEventListener('click', endUserFocus);
+    // 结束对方专注
+    endAiFocusBtn?.addEventListener('click', () => {
+      endAiFocus();
+    });
     inviteToggleMain?.addEventListener('click', () => {
       const enabling = !focusState.ai.enabled;
       if (!enabling) {
@@ -2065,6 +2220,228 @@
       if(e.target === batchSendModalOverlay) closeBatchModal();
     });
     confirmBatchSendBtn?.addEventListener('click', handleBatchSend);
+
+    // ===== 专注动画自定义按钮 =====
+    document.getElementById('focusAnimCustomizeBtn')?.addEventListener('click', openFocusAnimManager);
+  }
+
+  // ============================================================
+  // ===== 专注动画系统 =====
+  // ============================================================
+
+  /**
+   * focusAnimLibrary: { user: [{id, name, src}], duo: [{id, name, src}] }
+   * focusAnimSelected: { user: id|null, duo: id|null }
+   * 分类：'user' = 用户/角色动画（单人），'duo' = 双人动画
+   */
+  let focusAnimLibrary = { user: [], duo: [] };
+  let focusAnimSelected = { user: null, duo: null };
+
+  function loadFocusAnimData() {
+    try {
+      const lib = localStorage.getItem('focus_anim_library');
+      if (lib) focusAnimLibrary = JSON.parse(lib);
+    } catch(e) {}
+    try {
+      const sel = localStorage.getItem('focus_anim_selected');
+      if (sel) focusAnimSelected = JSON.parse(sel);
+    } catch(e) {}
+  }
+
+  function saveFocusAnimData() {
+    localStorage.setItem('focus_anim_library', JSON.stringify(focusAnimLibrary));
+    localStorage.setItem('focus_anim_selected', JSON.stringify(focusAnimSelected));
+  }
+
+  /** 根据当前专注状态决定显示哪个动画 */
+  function syncFocusAnim() {
+    const section = document.getElementById('focusAnimSection');
+    const img = document.getElementById('focusAnimImg');
+    if (!section || !img) return;
+
+    const userRunning = !!focusState.user.running;
+    const aiRunning = !!(focusState.ai.enabled && focusState.ai.running);
+    const bothRunning = userRunning && aiRunning;
+
+    if (!userRunning && !aiRunning) {
+      // 两者都未运行，隐藏
+      if (section.style.display !== 'none') {
+        section.style.display = 'none';
+        img.src = '';
+      }
+      return;
+    }
+
+    // 确定用哪个分类
+    const category = bothRunning ? 'duo' : 'user';
+    const selectedId = focusAnimSelected[category];
+    const list = focusAnimLibrary[category] || [];
+
+    let animSrc = null;
+    if (selectedId) {
+      const found = list.find(a => a.id === selectedId);
+      if (found) animSrc = found.src;
+    }
+    // 如果没有选中或选中的找不到，用第一个
+    if (!animSrc && list.length > 0) {
+      animSrc = list[0].src;
+      // 自动更新选中
+      focusAnimSelected[category] = list[0].id;
+    }
+
+    if (!animSrc) {
+      // 没有可用动画，隐藏
+      section.style.display = 'none';
+      img.src = '';
+      return;
+    }
+
+    section.style.display = 'block';
+    if (img.src !== animSrc) {
+      img.src = animSrc;
+    }
+  }
+
+  // ---------- 动画管理弹窗 ----------
+  let focusAnimManagerTab = 'user'; // 当前激活 tab
+
+  function openFocusAnimManager() {
+    // 创建弹窗（如已存在则复用）
+    let overlay = document.getElementById('focusAnimManagerOverlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'focusAnimManagerOverlay';
+      overlay.className = 'modal-overlay focus-anim-modal';
+      overlay.innerHTML = `
+        <div class="modal-container">
+          <div class="modal-header">
+            <h3><i class="fas fa-images mr-8"></i>专注动画</h3>
+            <button class="modal-close" id="closeFocusAnimModal">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="focus-anim-tabs" id="focusAnimTabs">
+              <button class="focus-anim-tab active" data-cat="user">用户/角色动画</button>
+              <button class="focus-anim-tab" data-cat="duo">双人动画</button>
+            </div>
+            <div class="focus-anim-grid" id="focusAnimGrid"></div>
+            <p class="fs-12 text-secondary mt-10" style="text-align:center;">
+              <i class="fas fa-info-circle mr-4"></i>点击动画可设为当前使用；专注进行中立即生效
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" id="closeFocusAnimModalBtn">关闭</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      // 关闭
+      const close = () => overlay.classList.remove('show');
+      overlay.querySelector('#closeFocusAnimModal').addEventListener('click', close);
+      overlay.querySelector('#closeFocusAnimModalBtn').addEventListener('click', close);
+      overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+      // tab 切换
+      overlay.querySelector('#focusAnimTabs').addEventListener('click', e => {
+        const tab = e.target.closest('[data-cat]');
+        if (!tab) return;
+        focusAnimManagerTab = tab.dataset.cat;
+        overlay.querySelectorAll('.focus-anim-tab').forEach(t => t.classList.toggle('active', t.dataset.cat === focusAnimManagerTab));
+        renderFocusAnimGrid();
+      });
+    }
+
+    focusAnimManagerTab = 'user';
+    overlay.querySelectorAll('.focus-anim-tab').forEach(t => t.classList.toggle('active', t.dataset.cat === 'user'));
+    renderFocusAnimGrid();
+    overlay.classList.add('show');
+  }
+
+  function renderFocusAnimGrid() {
+    const grid = document.getElementById('focusAnimGrid');
+    if (!grid) return;
+    const cat = focusAnimManagerTab;
+    const list = focusAnimLibrary[cat] || [];
+    const selectedId = focusAnimSelected[cat];
+
+    grid.innerHTML = '';
+
+    if (list.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'focus-anim-empty';
+      empty.innerHTML = `<i class="fas fa-film fa-2x mb-8" style="display:block;opacity:0.3;"></i>暂无动画，点击 + 上传`;
+      grid.appendChild(empty);
+    } else {
+      list.forEach(anim => {
+        const item = document.createElement('div');
+        item.className = 'focus-anim-item' + (anim.id === selectedId ? ' selected' : '');
+        item.title = anim.name;
+
+        const imgEl = document.createElement('img');
+        imgEl.src = anim.src;
+        imgEl.alt = anim.name;
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'focus-anim-item-del';
+        delBtn.title = '删除';
+        delBtn.innerHTML = '<i class="fas fa-times"></i>';
+        delBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          focusAnimLibrary[cat] = focusAnimLibrary[cat].filter(a => a.id !== anim.id);
+          if (focusAnimSelected[cat] === anim.id) focusAnimSelected[cat] = null;
+          saveFocusAnimData();
+          syncFocusAnim();
+          renderFocusAnimGrid();
+        });
+
+        item.appendChild(imgEl);
+        item.appendChild(delBtn);
+        item.addEventListener('click', () => {
+          focusAnimSelected[cat] = anim.id;
+          saveFocusAnimData();
+          syncFocusAnim();
+          renderFocusAnimGrid();
+        });
+
+        grid.appendChild(item);
+      });
+    }
+
+    // 添加按钮
+    const addBtn = document.createElement('button');
+    addBtn.className = 'focus-anim-add-btn';
+    addBtn.title = '上传动画（GIF/图片）';
+    addBtn.innerHTML = '<i class="fas fa-plus"></i>';
+    addBtn.addEventListener('click', () => {
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.accept = 'image/gif,image/png,image/jpeg,image/webp,image/apng';
+      inp.multiple = true;
+      inp.onchange = e => {
+        const files = Array.from(e.target.files);
+        let processed = 0;
+        files.forEach(file => {
+          const reader = new FileReader();
+          reader.onload = ev => {
+            const id = 'anim_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+            const entry = { id, name: file.name.replace(/\.[^.]+$/, ''), src: ev.target.result };
+            if (!focusAnimLibrary[cat]) focusAnimLibrary[cat] = [];
+            focusAnimLibrary[cat].push(entry);
+            // 自动选中第一个上传的
+            if (processed === 0) focusAnimSelected[cat] = id;
+            processed++;
+            if (processed === files.length) {
+              saveFocusAnimData();
+              syncFocusAnim();
+              renderFocusAnimGrid();
+            }
+          };
+          reader.readAsDataURL(file);
+        });
+      };
+      inp.click();
+    });
+    grid.appendChild(addBtn);
   }
 
   init();
