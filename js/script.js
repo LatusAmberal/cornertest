@@ -55,6 +55,21 @@
   const characterPreviewBio = document.getElementById('characterPreviewBio');
   const editCharacterAvatarBtn = document.getElementById('editCharacterAvatarBtn');
   const editCharacterCoverBtn = document.getElementById('editCharacterCoverBtn');
+  const focusIcon = document.getElementById('focusIcon');
+  const focusActivitySelect = document.getElementById('focusActivitySelect');
+  const focusCustomActivityInput = document.getElementById('focusCustomActivityInput');
+  const focusMinutesInput = document.getElementById('focusMinutesInput');
+  const focusUserTimerDisplay = document.getElementById('focusUserTimerDisplay');
+  const focusUserActivityDisplay = document.getElementById('focusUserActivityDisplay');
+  const focusStartBtn = document.getElementById('focusStartBtn');
+  const focusStopBtn = document.getElementById('focusStopBtn');
+  const focusResetBtn = document.getElementById('focusResetBtn');
+  const focusInviteAiBtn = document.getElementById('focusInviteAiBtn');
+  const focusAiCard = document.getElementById('focusAiCard');
+  const focusAiTimerDisplay = document.getElementById('focusAiTimerDisplay');
+  const focusAiActivityDisplay = document.getElementById('focusAiActivityDisplay');
+  const focusEditAiBtn = document.getElementById('focusEditAiBtn');
+  const focusRemoveAiBtn = document.getElementById('focusRemoveAiBtn');
 
   const commonDialogOverlay = document.getElementById('commonDialogOverlay');
   const dialogTitle = document.getElementById('dialogTitle');
@@ -116,6 +131,12 @@
     style: '',
     examples: ''
   };
+
+  let focusState = {
+    user: { activity: '学习', durationSec: 25 * 60, remainingSec: 25 * 60, running: false, lastStartTs: 0, startRemainingSec: 25 * 60 },
+    ai: { enabled: false, activity: '陪你专注', durationSec: 25 * 60, remainingSec: 25 * 60, running: false, lastStartTs: 0, startRemainingSec: 25 * 60 }
+  };
+  let focusTickerId = null;
 
   // ---------- 清除括号及其内容 ----------
   function cleanParentheses(text) {
@@ -1171,18 +1192,246 @@
 
   // ---------- 视图切换 ----------
   function setActiveView(view) {
-    chatMain.classList.remove('chat-hidden', 'profile-hidden', 'character-hidden', 'data-hidden');
+    chatMain.classList.remove('chat-hidden', 'profile-hidden', 'character-hidden', 'data-hidden', 'focus-hidden');
     document.querySelectorAll('.sidebar-icon').forEach(icon => icon.classList.remove('active'));
     userAvatarBtn.classList.remove('active');
     if (view === 'chat') chatIcon.classList.add('active');
     else if (view === 'settings') { chatMain.classList.add('chat-hidden'); gearIcon.classList.add('active'); }
     else if (view === 'profile') { chatMain.classList.add('profile-hidden'); userAvatarBtn.classList.add('active'); }
     else if (view === 'character') { chatMain.classList.add('character-hidden'); characterIcon.classList.add('active'); }
+    else if (view === 'focus') { chatMain.classList.add('focus-hidden'); focusIcon?.classList.add('active'); }
     else if (view === 'data') {
       chatMain.classList.add('data-hidden');
       dataManagerIcon.classList.add('active');
       refreshStorageStats();
     }
+  }
+
+  function formatCountdown(totalSeconds) {
+    const s = Math.max(0, Math.floor(totalSeconds));
+    const mm = Math.floor(s / 60).toString().padStart(2, '0');
+    const ss = Math.floor(s % 60).toString().padStart(2, '0');
+    return `${mm}:${ss}`;
+  }
+
+  function computeRemaining(timer) {
+    if (!timer.running) return Math.max(0, timer.remainingSec || 0);
+    const elapsed = (Date.now() - (timer.lastStartTs || 0)) / 1000;
+    return Math.max(0, (timer.startRemainingSec || 0) - elapsed);
+  }
+
+  function saveFocusState() {
+    try { localStorage.setItem('focus_state', JSON.stringify(focusState)); } catch(e) {}
+  }
+
+  function loadFocusState() {
+    try {
+      const saved = localStorage.getItem('focus_state');
+      if (!saved) return;
+      const parsed = JSON.parse(saved);
+      if (!parsed || typeof parsed !== 'object') return;
+      focusState = {
+        user: { ...focusState.user, ...(parsed.user || {}) },
+        ai: { ...focusState.ai, ...(parsed.ai || {}) }
+      };
+    } catch(e) {}
+  }
+
+  function normalizeFocusAfterLoad() {
+    const uRem = computeRemaining(focusState.user);
+    if (uRem <= 0) {
+      focusState.user.remainingSec = 0;
+      focusState.user.running = false;
+      focusState.user.lastStartTs = 0;
+      focusState.user.startRemainingSec = 0;
+    } else if (focusState.user.running) {
+      focusState.user.remainingSec = uRem;
+      focusState.user.startRemainingSec = uRem;
+      focusState.user.lastStartTs = Date.now();
+    }
+
+    const aRem = computeRemaining(focusState.ai);
+    if (!focusState.ai.enabled) {
+      focusState.ai.running = false;
+    } else if (aRem <= 0) {
+      focusState.ai.remainingSec = 0;
+      focusState.ai.running = false;
+      focusState.ai.lastStartTs = 0;
+      focusState.ai.startRemainingSec = 0;
+    } else if (focusState.ai.running) {
+      focusState.ai.remainingSec = aRem;
+      focusState.ai.startRemainingSec = aRem;
+      focusState.ai.lastStartTs = Date.now();
+    }
+  }
+
+  function syncFocusUI() {
+    if (focusUserTimerDisplay) focusUserTimerDisplay.textContent = formatCountdown(computeRemaining(focusState.user));
+    if (focusUserActivityDisplay) focusUserActivityDisplay.textContent = focusState.user.activity || '专注';
+
+    if (focusActivitySelect) {
+      const activity = (focusState.user.activity || '').trim();
+      const values = Array.from(focusActivitySelect.options).map(o => o.value);
+      const matched = activity && values.includes(activity) && activity !== '自定义';
+      focusActivitySelect.value = matched ? activity : '自定义';
+      if (focusCustomActivityInput) {
+        focusCustomActivityInput.classList.toggle('hidden', matched);
+        if (!matched && focusCustomActivityInput.value !== activity) focusCustomActivityInput.value = activity;
+      }
+    }
+
+    if (focusMinutesInput) {
+      const mins = Math.max(1, Math.round((focusState.user.durationSec || 1500) / 60));
+      if (Number(focusMinutesInput.value) !== mins) focusMinutesInput.value = String(mins);
+    }
+
+    if (focusStartBtn) {
+      const label = focusState.user.running ? '进行中' : (computeRemaining(focusState.user) > 0 && computeRemaining(focusState.user) < (focusState.user.durationSec || 0) ? '继续' : '开始');
+      focusStartBtn.innerHTML = `<i class="fas fa-play mr-8"></i>${label}`;
+      focusStartBtn.disabled = focusState.user.running;
+    }
+    if (focusStopBtn) focusStopBtn.disabled = !focusState.user.running;
+
+    if (focusAiCard) focusAiCard.style.display = focusState.ai.enabled ? 'block' : 'none';
+    if (focusAiTimerDisplay) focusAiTimerDisplay.textContent = formatCountdown(computeRemaining(focusState.ai));
+    if (focusAiActivityDisplay) focusAiActivityDisplay.textContent = focusState.ai.activity || '专注';
+  }
+
+  function ensureFocusTicker() {
+    if (focusTickerId) return;
+    focusTickerId = setInterval(() => {
+      const userRunning = !!focusState.user.running;
+      const aiRunning = !!(focusState.ai.enabled && focusState.ai.running);
+
+      if (!userRunning && !aiRunning) {
+        clearInterval(focusTickerId);
+        focusTickerId = null;
+        syncFocusUI();
+        saveFocusState();
+        return;
+      }
+
+      const uRem = computeRemaining(focusState.user);
+      if (focusState.user.running && uRem <= 0) {
+        focusState.user.running = false;
+        focusState.user.remainingSec = 0;
+        focusState.user.lastStartTs = 0;
+        focusState.user.startRemainingSec = 0;
+      }
+
+      const aRem = computeRemaining(focusState.ai);
+      if (focusState.ai.enabled && focusState.ai.running && aRem <= 0) {
+        focusState.ai.running = false;
+        focusState.ai.remainingSec = 0;
+        focusState.ai.lastStartTs = 0;
+        focusState.ai.startRemainingSec = 0;
+      }
+
+      syncFocusUI();
+    }, 250);
+  }
+
+  function startUserFocus() {
+    if (focusState.user.running) return;
+    const rem = computeRemaining(focusState.user);
+    if (rem <= 0) focusState.user.remainingSec = focusState.user.durationSec;
+    focusState.user.running = true;
+    focusState.user.startRemainingSec = focusState.user.remainingSec;
+    focusState.user.lastStartTs = Date.now();
+    saveFocusState();
+    syncFocusUI();
+    ensureFocusTicker();
+  }
+
+  function stopUserFocus() {
+    if (!focusState.user.running) return;
+    focusState.user.remainingSec = computeRemaining(focusState.user);
+    focusState.user.running = false;
+    focusState.user.lastStartTs = 0;
+    focusState.user.startRemainingSec = focusState.user.remainingSec;
+    saveFocusState();
+    syncFocusUI();
+  }
+
+  function resetUserFocus() {
+    focusState.user.running = false;
+    focusState.user.remainingSec = focusState.user.durationSec;
+    focusState.user.lastStartTs = 0;
+    focusState.user.startRemainingSec = focusState.user.remainingSec;
+    saveFocusState();
+    syncFocusUI();
+  }
+
+  function setUserFocusActivity(activity) {
+    focusState.user.activity = (activity || '').trim() || '专注';
+    saveFocusState();
+    syncFocusUI();
+  }
+
+  function setUserFocusMinutes(minutes) {
+    const m = Math.max(1, Math.min(999, Number(minutes) || 25));
+    stopUserFocus();
+    focusState.user.durationSec = Math.round(m * 60);
+    focusState.user.remainingSec = focusState.user.durationSec;
+    focusState.user.startRemainingSec = focusState.user.remainingSec;
+    saveFocusState();
+    syncFocusUI();
+  }
+
+  function openAiEditDialog({ title, activity, minutes, confirmText, onConfirm }) {
+    const actId = 'focusAiActivityInput';
+    const minId = 'focusAiMinutesInput';
+    const body = `
+      <div class="config-group">
+        <label>对方活动</label>
+        <input type="text" id="${actId}" placeholder="例如：阅读 / 写作 / 运动">
+      </div>
+      <div class="config-group">
+        <label>对方倒计时（分钟）</label>
+        <input type="number" id="${minId}" min="1" max="999">
+      </div>
+    `;
+    showCommonDialog({
+      title,
+      customBody: body,
+      confirmText,
+      onConfirm: () => {
+        const a = document.getElementById(actId)?.value || '';
+        const m = Number(document.getElementById(minId)?.value || 25);
+        onConfirm({ activity: a, minutes: m });
+      }
+    });
+    setTimeout(() => {
+      const actEl = document.getElementById(actId);
+      if (actEl) actEl.value = activity || '';
+      const minEl = document.getElementById(minId);
+      if (minEl) minEl.value = String(Number(minutes) || 25);
+    }, 0);
+  }
+
+  function enableAiFocus({ activity, minutes }) {
+    const m = Math.max(1, Math.min(999, Number(minutes) || 25));
+    focusState.ai.enabled = true;
+    focusState.ai.activity = (activity || '').trim() || '陪你专注';
+    focusState.ai.durationSec = Math.round(m * 60);
+    focusState.ai.remainingSec = focusState.ai.durationSec;
+    focusState.ai.running = true;
+    focusState.ai.startRemainingSec = focusState.ai.remainingSec;
+    focusState.ai.lastStartTs = Date.now();
+    saveFocusState();
+    syncFocusUI();
+    ensureFocusTicker();
+  }
+
+  function editAiFocus({ activity, minutes }) {
+    enableAiFocus({ activity, minutes });
+  }
+
+  function removeAiFocus() {
+    focusState.ai.enabled = false;
+    focusState.ai.running = false;
+    saveFocusState();
+    syncFocusUI();
   }
 
   // ---------- 通用弹窗逻辑 ----------
@@ -1294,8 +1543,12 @@
     loadCharacterFromStorage();
     loadProfile();
     loadUserImages();
+    loadFocusState();
+    normalizeFocusAfterLoad();
     renderMessages();
     buildChatPreferencesUI();
+    syncFocusUI();
+    if (focusState.user.running || (focusState.ai.enabled && focusState.ai.running)) ensureFocusTicker();
 
     if (themeToggleSettings) themeToggleSettings.addEventListener('click', toggleTheme);
     sendBtn.addEventListener('click', handleSendMessage);
@@ -1330,8 +1583,49 @@
     chatIcon.addEventListener('click', ()=>setActiveView('chat'));
     gearIcon.addEventListener('click', ()=>setActiveView('settings'));
     userAvatarBtn.addEventListener('click', ()=>setActiveView('profile'));
+    focusIcon?.addEventListener('click', ()=>setActiveView('focus'));
     characterIcon.addEventListener('click', ()=>setActiveView('character'));
     dataManagerIcon.addEventListener('click', ()=>setActiveView('data'));
+
+    focusActivitySelect?.addEventListener('change', () => {
+      if (focusActivitySelect.value === '自定义') {
+        focusCustomActivityInput?.classList.remove('hidden');
+        focusCustomActivityInput?.focus();
+        setUserFocusActivity(focusCustomActivityInput?.value || focusState.user.activity);
+      } else {
+        focusCustomActivityInput?.classList.add('hidden');
+        setUserFocusActivity(focusActivitySelect.value);
+      }
+    });
+    focusCustomActivityInput?.addEventListener('input', () => {
+      if (focusActivitySelect?.value === '自定义') setUserFocusActivity(focusCustomActivityInput.value);
+    });
+    focusMinutesInput?.addEventListener('change', () => setUserFocusMinutes(focusMinutesInput.value));
+    focusStartBtn?.addEventListener('click', startUserFocus);
+    focusStopBtn?.addEventListener('click', stopUserFocus);
+    focusResetBtn?.addEventListener('click', resetUserFocus);
+    focusInviteAiBtn?.addEventListener('click', () => {
+      const defaultActivity = `陪你一起${focusState.user.activity || '专注'}`;
+      const defaultMinutes = Math.max(1, Math.round((focusState.user.durationSec || 1500) / 60));
+      openAiEditDialog({
+        title: '邀请 AI 加入专注',
+        activity: defaultActivity,
+        minutes: defaultMinutes,
+        confirmText: '加入',
+        onConfirm: ({ activity, minutes }) => enableAiFocus({ activity, minutes })
+      });
+    });
+    focusEditAiBtn?.addEventListener('click', () => {
+      const minutes = Math.max(1, Math.round((focusState.ai.durationSec || 1500) / 60));
+      openAiEditDialog({
+        title: '编辑对方专注',
+        activity: focusState.ai.activity || '陪你专注',
+        minutes,
+        confirmText: '保存',
+        onConfirm: ({ activity, minutes }) => editAiFocus({ activity, minutes })
+      });
+    });
+    focusRemoveAiBtn?.addEventListener('click', removeAiFocus);
 
     saveCharacterBtn.addEventListener('click', saveCharacterToStorage);
     resetCharacterBtn.addEventListener('click', ()=>{
