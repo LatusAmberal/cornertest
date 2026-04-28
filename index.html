@@ -222,11 +222,11 @@
                     </button>
                 </div>
                 <!-- 单人动画 / 单个双人GIF -->
-                <video class="focus-anim-video" id="focusAnimSingle" style="display:none;" muted playsinline loop></video>
+                <img class="focus-anim-video" id="focusAnimSingle" style="display:none;" alt="专注动画" />
                 <!-- 双人双图并排（双人均专注时） -->
                 <div class="focus-anim-duo-container" id="focusAnimDuoContainer" style="display:none;">
-                    <video class="focus-anim-video" id="focusAnimDuoUser" muted playsinline loop></video>
-                    <video class="focus-anim-video" id="focusAnimDuoChar" muted playsinline loop></video>
+                    <img class="focus-anim-video" id="focusAnimDuoUser" alt="用户动画" />
+                    <img class="focus-anim-video" id="focusAnimDuoChar" alt="角色动画" />
                 </div>
                 <!-- 右上角自定义按钮 -->
                 <button class="focus-anim-customize-btn" id="focusAnimCustomizeBtn" title="管理动画">
@@ -318,6 +318,17 @@
                 <div class="config-group">
                     <label>风格描述</label>
                     <textarea id="charStyleInput" rows="2" placeholder="例如：句子简短，偶尔使用「……」，生气时会说「哼」"></textarea>
+                </div>
+                <!-- AI自动学习的风格词条区域 -->
+                <div class="config-group mt-12" id="learnedTraitsSection">
+                    <label class="flex-align-center">
+                        <span>AI学习词条</span>
+                        <span class="fs-12 text-secondary ml-8" id="learnedTraitsCount">（0/5）</span>
+                    </label>
+                    <div id="learnedTraitsContainer" class="learned-traits-container">
+                        <div class="learned-traits-empty text-secondary fs-13">暂无AI学习的词条</div>
+                    </div>
+                    <div class="fs-12 text-secondary mt-6">点击词条可选入风格描述，未选词条仅供展示不会被AI读取</div>
                 </div>
                 <details class="mt-12" id="styleAdvancedDetails">
                     <summary class="advanced-summary">高级设置 · 对话示例</summary>
