@@ -441,11 +441,11 @@
       const msgDateKey = new Date(msgTime).toDateString();
 
       if (msg.isReset) {
-        const d = new Date(msgTime);
-        const fullTime = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+        // 显示消息的 content 内容（如"对方专注结束 · HH:MM"）
+        const displayText = msg.content || '';
         html += `<div class="message-separator reset-separator">
           <div class="line line-left"></div>
-          <span>${fullTime}</span>
+          <span>${displayText}</span>
           <div class="line line-right"></div>
         </div>`;
         lastTimestamp = msgTime;
@@ -585,16 +585,24 @@
 要求：
 1. 总结简洁，直接以指令形式输出。
 2. 比较原回复和新回复，找出差异点。
-3. 输出格式：[总结出的风格指令]
-4. 不要输出其他废话。`;
+3. 输出格式：只输出风格指令，不要其他文字`;
 
       const learningResult = await callAI(prompt, "你是一个对话风格分析助手。");
-      if (learningResult) {
-        const currentStyle = charStyleInput.value.trim();
-        // 用 * 标注 AI 修改的部分
-        const newStyle = currentStyle + (currentStyle ? '\n' : '') + `* AI自动学习：${learningResult}`;
-        charStyleInput.value = newStyle;
-        saveCharacterToStorage();
+      if (learningResult && learningResult.trim()) {
+        // 添加到词条池
+        learnedTraits.push({
+          id: 'trait_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+          text: learningResult.trim(),
+          selected: false,
+          timestamp: Date.now()
+        });
+        saveLearnedTraits();
+        renderLearnedTraits();
+
+        // 如果累积到5条词条，自动总结
+        if (learnedTraits.length >= 5) {
+          summarizeTraitsToStyle();
+        }
       }
     } catch(e) {
       console.error('AI Learning error:', e);
@@ -1405,7 +1413,14 @@
   function syncFocusUI() {
     if (focusUserTimerDisplay) focusUserTimerDisplay.textContent = formatCountdown(computeTimerSeconds(focusState.user));
     if (focusUserActivityDisplay) focusUserActivityDisplay.textContent = focusState.user.activity || '专注';
-    if (focusModeToggle) focusModeToggle.classList.toggle('active', focusState.user.mode === 'up');
+    if (focusModeToggle) {
+      focusModeToggle.classList.toggle('active', focusState.user.mode === 'up');
+      // 专注进行中（running 或已有进度）时，禁用模式切换
+      const isLocked = !!focusState.user.running;
+      focusModeToggle.style.pointerEvents = isLocked ? 'none' : 'auto';
+      focusModeToggle.style.opacity       = isLocked ? '0.4' : '1';
+      focusModeToggle.title               = isLocked ? '专注中无法切换计时模式' : '';
+    }
 
     if (focusStartBtn) {
       const hasProgress = focusState.user.mode === 'up'
@@ -1431,6 +1446,16 @@
         focusStartBtn.classList.add('btn-primary');
         focusStartBtn.disabled = false;
       }
+    }
+
+    // 结束专注按钮：只有在开始专注后（有进度）才可交互
+    if (focusResetBtn) {
+      const hasProgress = focusState.user.mode === 'up'
+        ? (Number(focusState.user.elapsedSec) > 0)
+        : (Number(focusState.user.startRemainingSec) > 0 && Number(focusState.user.startRemainingSec) < Number(focusState.user.durationSec || 0));
+      const isRunning = !!focusState.user.running;
+      // 可交互：当正在运行 或 有进度（已暂停）
+      focusResetBtn.disabled = !isRunning && !hasProgress;
     }
 
     if (focusAiCard) focusAiCard.style.display = focusState.ai.enabled ? 'block' : 'none';
@@ -1579,11 +1604,23 @@
   }
 
   function endUserFocus() {
+    // 计算专注时长
+    const elapsed = focusState.user.mode === 'up'
+      ? focusState.user.elapsedSec
+      : (focusState.user.startRemainingSec - focusState.user.remainingSec);
+    const duration = focusState.user.durationSec || 0;
+    const elapsedMin = Math.round(elapsed / 60);
+    const durationMin = Math.round(duration / 60);
+    const activity = focusState.user.activity || '专注';
+
+    const timeStr = elapsedMin > 0 ? `${elapsedMin}分钟` : `${durationMin}分钟`;
+    const message = `${activity} · ${timeStr}`;
+
     resetUserOnly();
     // 显示专注结束弹窗
     showCommonDialog({
       title: '⭐专注结束',
-      message: '',
+      message: message,
       showCancel: false,
       confirmText: '好的',
       onConfirm: null
@@ -2041,17 +2078,19 @@
   }
 
   // ---------- 初始化 ----------
-  function init() {
+  async function init() {
     loadTheme();
     loadConfigFromStorage();
     loadCharacterFromStorage();
+    loadLearnedTraits();
     loadProfile();
     loadUserImages();
     loadFocusState();
-    loadFocusAnimData();
+    await loadFocusAnimData();   // IndexedDB 异步读取
     normalizeFocusAfterLoad();
     renderMessages();
     buildChatPreferencesUI();
+    renderLearnedTraits();
     syncFocusUI();
     if (focusState.user.running || (focusState.ai.enabled && focusState.ai.running)) ensureFocusTicker();
 
@@ -2172,8 +2211,11 @@
         confirmText: '重置',
         onConfirm: () => {
           localStorage.removeItem('character_data');
+          localStorage.removeItem('learned_traits');
           characterData = { worldBook:'',name:'',avatar:'',cover:'',bio:'',age:'',gender:'',appearance:'',personality:'',backstory:'',memories:'',style:'',examples:'' };
+          learnedTraits = [];
           loadCharacterFromStorage();
+          renderLearnedTraits();
         }
       });
     });
@@ -2268,6 +2310,87 @@
   }
 
   // ============================================================
+  // ===== IndexedDB 动画存储系统 =====
+  // 替代 localStorage，突破 5MB 限制，支持存储更大文件
+  // ============================================================
+  
+  const DB_NAME = 'focus_anim_db';
+  const DB_VERSION = 1;
+  const STORE_NAME = 'anims';
+  let dbInstance = null;
+
+  function openAnimDB() {
+    return new Promise((resolve, reject) => {
+      if (dbInstance) { resolve(dbInstance); return; }
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => { dbInstance = req.result; resolve(dbInstance); };
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+        }
+      };
+    });
+  }
+
+  /** 保存动画数据到 IndexedDB */
+  async function saveAnimToDB(id, data) {
+    const db = await openAnimDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put({ id, data, updatedAt: Date.now() });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  /** 从 IndexedDB 读取所有动画数据 */
+  async function loadAnimsFromDB() {
+    const db = await openAnimDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  /** 删除单个动画 */
+  async function deleteAnimFromDB(id) {
+    const db = await openAnimDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  /** 清除所有动画数据 */
+  async function clearAnimsFromDB() {
+    const db = await openAnimDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  /** 获取 IndexedDB 总存储用量（估算） */
+  async function getAnimDBUsage() {
+    try {
+      const animes = await loadAnimsFromDB();
+      let total = 0;
+      animes.forEach(a => {
+        total += a.data.library ? JSON.stringify(a.data.library).length : 0;
+      });
+      return { count: animes.length, size: total };
+    } catch(e) { return { count: 0, size: 0 }; }
+  }
+
+  // ============================================================
   // ===== 专注动画系统 v2 =====
   // ============================================================
   //
@@ -2280,30 +2403,164 @@
   let focusAnimSelected = { user: null, character: null, duo: null };
   let focusAnimDuoMode  = 'single'; // 'single' | 'dual'
 
-  function loadFocusAnimData() {
+  // ===== AI学习词条系统 =====
+  let learnedTraits = []; // { id, text, selected, timestamp }
+
+  function loadLearnedTraits() {
     try {
+      const raw = localStorage.getItem('learned_traits');
+      if (raw) learnedTraits = JSON.parse(raw);
+    } catch(e) {}
+  }
+
+  function saveLearnedTraits() {
+    localStorage.setItem('learned_traits', JSON.stringify(learnedTraits));
+  }
+
+  function renderLearnedTraits() {
+    const container = document.getElementById('learnedTraitsContainer');
+    const countEl = document.getElementById('learnedTraitsCount');
+    if (!container) return;
+
+    if (learnedTraits.length === 0) {
+      container.innerHTML = '<div class="learned-traits-empty text-secondary fs-13">暂无AI学习的词条</div>';
+      if (countEl) countEl.textContent = '（0/5）';
+      return;
+    }
+
+    container.innerHTML = '';
+    learnedTraits.forEach(trait => {
+      const tag = document.createElement('div');
+      tag.className = 'learned-trait-tag' + (trait.selected ? ' selected' : '');
+      tag.innerHTML = `
+        <span class="trait-text" title="${trait.text}">${trait.text}</span>
+        <span class="trait-remove" title="删除">×</span>
+      `;
+      tag.querySelector('.trait-text').addEventListener('click', () => {
+        trait.selected = !trait.selected;
+        saveLearnedTraits();
+        renderLearnedTraits();
+        updateStyleFromTraits();
+      });
+      tag.querySelector('.trait-remove').addEventListener('click', e => {
+        e.stopPropagation();
+        learnedTraits = learnedTraits.filter(t => t.id !== trait.id);
+        saveLearnedTraits();
+        renderLearnedTraits();
+        updateStyleFromTraits();
+      });
+      container.appendChild(tag);
+    });
+
+    if (countEl) countEl.textContent = `（${learnedTraits.length}/5）`;
+  }
+
+  function updateStyleFromTraits() {
+    if (!charStyleInput) return;
+    // 获取用户手动输入的风格描述（非AI学习部分）
+    const manualStyle = charStyleInput.value.split('* AI学习：').filter((_, i) => i === 0)[0] || charStyleInput.value;
+    const manualLines = manualStyle.split('\n').filter(l => l.trim());
+    // 获取选中的词条
+    const selectedTraits = learnedTraits.filter(t => t.selected).map(t => `* AI学习：${t.text}`);
+    const allLines = [...manualLines.filter(l => l.trim()), ...selectedTraits].filter(l => l.trim());
+    charStyleInput.value = allLines.join('\n');
+    saveCharacterToStorage();
+  }
+
+  async function summarizeTraitsToStyle() {
+    if (learnedTraits.length < 5) return;
+    const traitsText = learnedTraits.map(t => t.text).join('\n');
+    try {
+      const prompt = `请将以下5条对话风格词条总结为1条综合的对话风格描述：
+
+${traitsText}
+
+要求：
+1. 保留核心要点，去除冗余
+2. 简洁明了，直接以指令形式输出
+3. 不要输出其他废话`;
+
+      const result = await callAI(prompt, "你是一个对话风格分析助手。");
+      if (result && result.trim()) {
+        // 清空词条
+        learnedTraits = [];
+        saveLearnedTraits();
+        renderLearnedTraits();
+        // 添加总结结果
+        learnedTraits.push({
+          id: 'trait_' + Date.now(),
+          text: result.trim(),
+          selected: true,
+          timestamp: Date.now()
+        });
+        saveLearnedTraits();
+        renderLearnedTraits();
+        updateStyleFromTraits();
+      }
+    } catch(e) {
+      console.error('Summarize traits error:', e);
+    }
+  }
+
+  /** 异步加载动画数据（优先 IndexedDB，兼容旧 localStorage） */
+  async function loadFocusAnimData() {
+    try {
+      // 优先从 IndexedDB 加载
+      const dbRecords = await loadAnimsFromDB();
+      if (dbRecords.length > 0) {
+        const latest = dbRecords.sort((a, b) => b.updatedAt - a.updatedAt)[0];
+        if (latest.data) {
+          focusAnimLibrary  = latest.data.library  || { user: [], character: [], duo: [] };
+          focusAnimSelected = latest.data.selected || { user: null, character: null, duo: null };
+          focusAnimDuoMode  = latest.data.duoMode || 'single';
+          return;
+        }
+      }
+      // 兼容旧 localStorage 数据（首次迁移）
       const raw = localStorage.getItem('focus_anim_data');
       if (raw) {
         const data = JSON.parse(raw);
         focusAnimLibrary  = data.library  || { user: [], character: [], duo: [] };
         focusAnimSelected = data.selected || { user: null, character: null, duo: null };
         focusAnimDuoMode  = data.duoMode || 'single';
+        // 迁移到 IndexedDB
+        await saveFocusAnimData();
+        localStorage.removeItem('focus_anim_data');
       }
-    } catch(e) {}
+    } catch(e) {
+      console.error('Load anim data error:', e);
+    }
   }
 
-  function saveFocusAnimData() {
-    localStorage.setItem('focus_anim_data', JSON.stringify({
-      library:  focusAnimLibrary,
-      selected: focusAnimSelected,
-      duoMode:  focusAnimDuoMode
-    }));
+  /** 异步保存动画数据到 IndexedDB */
+  async function saveFocusAnimData() {
+    try {
+      const data = {
+        library:  focusAnimLibrary,
+        selected: focusAnimSelected,
+        duoMode:  focusAnimDuoMode
+      };
+      await saveAnimToDB('main', data);
+      // 清理旧 localStorage
+      localStorage.removeItem('focus_anim_data');
+    } catch(e) {
+      console.error('Save anim data error:', e);
+      // 降级：仍尝试存 localStorage（可能存不下）
+      try {
+        localStorage.setItem('focus_anim_data', JSON.stringify({
+          library:  focusAnimLibrary,
+          selected: focusAnimSelected,
+          duoMode:  focusAnimDuoMode
+        }));
+      } catch(e2) {
+        console.error('localStorage also failed:', e2);
+      }
+    }
   }
 
   /** 取某个分类当前选中动画的src，没有则自动选第一个 */
   function getAnimSrc(category) {
     const list = focusAnimLibrary[category] || [];
-    console.log(`[getAnimSrc] category=${category}, list.length=${list.length}, selected=${focusAnimSelected[category]}`);
     let id = focusAnimSelected[category];
     if (!id && list.length > 0) {
       id = list[0].id;
@@ -2327,23 +2584,25 @@
     const charRunning = !!(focusState.ai.enabled && focusState.ai.running);
     const bothRunning = userRunning && charRunning;
 
-    console.log(`[syncFocusAnim] userRunning=${userRunning}, charRunning=${charRunning}, bothRunning=${bothRunning}`);
-
-    // 停止并隐藏全部
-    stopAndHide(singleVideo);
-    stopAndHide(duoUserVideo);
-    stopAndHide(duoCharVideo);
-    duoContainer.style.display = 'none';
-    placeholder.style.display = 'none';
-
-    if (!userRunning && !charRunning) return; // 无人在专注
+    // 无人在专注：停止所有动画
+    if (!userRunning && !charRunning) {
+      stopAndHide(singleVideo);
+      stopAndHide(duoUserVideo);
+      stopAndHide(duoCharVideo);
+      duoContainer.style.display = 'none';
+      placeholder.style.display = 'none';
+      return;
+    }
 
     // === 双人均专注 ===
     if (bothRunning) {
+      stopAndHide(singleVideo); // 停止单人视频
+      duoContainer.style.display = 'flex';
+      placeholder.style.display = 'none';
       if (focusAnimDuoMode === 'single') {
         const src = getAnimSrc('duo');
         if (src) {
-          loadAndPlay(singleVideo, src);
+          showDuoSingle(src);
         } else {
           showDuoDual();
         }
@@ -2354,98 +2613,149 @@
     }
 
     // === 单人专注 ===
+    duoContainer.style.display = 'none';
     const src = userRunning ? getAnimSrc('user') : getAnimSrc('character');
-    console.log(`[syncFocusAnim] src=${src ? 'found' : 'null'}`);
     if (src) {
       loadAndPlay(singleVideo, src);
+      placeholder.style.display = 'none';
     } else {
+      stopAndHide(singleVideo);
       placeholder.style.display = 'flex';
     }
   }
 
-  /** 停止视频并清空src */
-  function stopAndHide(video) {
-    if (!video) return;
-    video.pause();
-    video.removeAttribute('src');
-    video.load();
-    video.style.display = 'none';
+  /** 隐藏动画元素并清空 src */
+  function stopAndHide(el) {
+    if (!el) return;
+    el.src = '';
+    el.style.display = 'none';
   }
 
-  /** 加载视频并播完从头循环 */
-  function loadAndPlay(video, src) {
-    if (!video) return;
-    video.removeAttribute('src');
-    video.load();
-    video.style.display = 'block';
-    video.src = src;
-    video.currentTime = 0;
-    // 等待视频准备好后再播放
-    const playVideo = () => {
-      video.play().catch(err => {
-        console.warn('视频播放失败:', err);
-      });
-    };
-    if (video.readyState >= 3) {
-      // 视频已经可以播放
-      playVideo();
-    } else {
-      // 等待 canplay 事件
-      video.oncanplay = () => {
-        video.oncanplay = null;
-        playVideo();
-      };
+  /** 显示动画（img.src 直接赋值，GIF/PNG/WEBP 全支持） */
+  function loadAndPlay(el, src) {
+    if (!el || !src) return;
+    // 已经在显示同一张，不重复赋值
+    if (el.src === src) {
+      el.style.display = 'block';
+      return;
     }
-    // 播完从头再来（播完触发 ended 时重新从0播放）
-    video.onended = () => {
-      video.currentTime = 0;
-      playVideo();
-    };
+    el.src = src;
+    el.style.display = 'block';
   }
 
   function showDuoDual() {
     const duoContainer = document.getElementById('focusAnimDuoContainer');
-    const duoUserVideo = document.getElementById('focusAnimDuoUser');
-    const duoCharVideo = document.getElementById('focusAnimDuoChar');
+    const duoUserEl    = document.getElementById('focusAnimDuoUser');
+    const duoCharEl    = document.getElementById('focusAnimDuoChar');
     duoContainer.style.display = 'flex';
     const userRunning = !!focusState.user.running;
     const charRunning = !!(focusState.ai.enabled && focusState.ai.running);
     if (userRunning) {
       const src = getAnimSrc('user');
-      if (src) loadAndPlay(duoUserVideo, src);
+      if (src) loadAndPlay(duoUserEl, src); else stopAndHide(duoUserEl);
+    } else {
+      stopAndHide(duoUserEl);
     }
     if (charRunning) {
       const src = getAnimSrc('character');
-      if (src) loadAndPlay(duoCharVideo, src);
+      if (src) loadAndPlay(duoCharEl, src); else stopAndHide(duoCharEl);
+    } else {
+      stopAndHide(duoCharEl);
     }
   }
 
-  /** 直接触发上传到指定分类 */
+  function showDuoSingle(duoSrc) {
+    const duoContainer = document.getElementById('focusAnimDuoContainer');
+    const duoUserEl    = document.getElementById('focusAnimDuoUser');
+    const duoCharEl    = document.getElementById('focusAnimDuoChar');
+    duoContainer.style.display = 'flex';
+    loadAndPlay(duoUserEl, duoSrc);
+    stopAndHide(duoCharEl);
+  }
+
+
+
+  /**
+   * 压缩图片到指定大小（仅限非 GIF，GIF 直接存原文件）
+   * 目标：<2MB，quality 逐步降低直到满足要求
+   */
+  function compressImageFile(file) {
+    return new Promise(resolve => {
+      // GIF 无法通过 Canvas 保留动画，直接原样返回
+      if (file.type === 'image/gif') {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.readAsDataURL(file);
+        return;
+      }
+      // 其他格式（PNG/JPEG/WEBP）用 Canvas 压缩
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const MAX_PX = 1200; // 最长边限制
+        let { width, height } = img;
+        if (width > MAX_PX || height > MAX_PX) {
+          const ratio = Math.min(MAX_PX / width, MAX_PX / height);
+          width  = Math.round(width  * ratio);
+          height = Math.round(height * ratio);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width  = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+
+        // 逐级降低质量，目标 2MB dataURL（约 1.5MB 原文件）
+        const TARGET = 2 * 1024 * 1024;
+        let quality = 0.9;
+        let dataURL;
+        do {
+          dataURL = canvas.toDataURL('image/webp', quality);
+          quality -= 0.1;
+        } while (dataURL.length > TARGET && quality > 0.1);
+
+        resolve(dataURL);
+      };
+      img.onerror = () => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.readAsDataURL(file);
+      };
+      img.src = url;
+    });
+  }
+
+  /** 直接触发上传到指定分类（无大小限制，自动压缩非GIF图片） */
   function triggerFocusAnimUpload(category) {
     const inp = document.createElement('input');
     inp.type = 'file';
     inp.accept = 'image/gif,image/png,image/jpeg,image/webp,image/apng';
     inp.multiple = true;
-    inp.onchange = e => {
+    inp.onchange = async e => {
       const files = Array.from(e.target.files);
       if (files.length === 0) return;
-      let processed = 0;
-      files.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = ev => {
-          const id = 'anim_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-          const entry = { id, name: file.name.replace(/\.[^.]+$/, ''), src: ev.target.result };
-          if (!focusAnimLibrary[category]) focusAnimLibrary[category] = [];
-          focusAnimLibrary[category].push(entry);
-          if (processed === 0) focusAnimSelected[category] = id;
-          processed++;
-          if (processed === files.length) {
-            saveFocusAnimData();
-            syncFocusAnim();
-          }
-        };
-        reader.readAsDataURL(file);
-      });
+
+      for (const file of files) {
+        const isGif = file.type === 'image/gif';
+        const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+        // GIF 超过 10MB 给提示，但还是允许存（IndexedDB 能承受）
+        if (isGif && file.size > 10 * 1024 * 1024) {
+          const ok = confirm(`GIF "${file.name}"（${sizeMB}MB）较大，可能加载较慢。\n继续添加？`);
+          if (!ok) continue;
+        }
+
+        // 自动压缩（非GIF）或直接读取（GIF）
+        const src = await compressImageFile(file);
+        const id = 'anim_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+        const entry = { id, name: file.name.replace(/\.[^.]+$/, ''), src };
+        if (!focusAnimLibrary[category]) focusAnimLibrary[category] = [];
+        focusAnimLibrary[category].push(entry);
+        if (focusAnimSelected[category] === null) focusAnimSelected[category] = id;
+      }
+
+      await saveFocusAnimData();
+      renderFocusAnimGrid();
+      syncFocusAnim();
     };
     inp.click();
   }
@@ -2515,11 +2825,11 @@
       });
 
       // 双人模式切换
-      overlay.querySelector('#focusAnimDuoToggle').addEventListener('click', e => {
+      overlay.querySelector('#focusAnimDuoToggle').addEventListener('click', async e => {
         const btn = e.target.closest('[data-mode]');
         if (!btn) return;
         focusAnimDuoMode = btn.dataset.mode;
-        saveFocusAnimData();
+        await saveFocusAnimData();
         syncFocusAnim();
         overlay.querySelectorAll('.focus-anim-mode-btn').forEach(b => {
           b.classList.toggle('active', b.dataset.mode === focusAnimDuoMode);
@@ -2569,20 +2879,20 @@
         delBtn.className = 'focus-anim-item-del';
         delBtn.title = '删除';
         delBtn.innerHTML = '&times;';
-        delBtn.addEventListener('click', e => {
+        delBtn.addEventListener('click', async e => {
           e.stopPropagation();
           focusAnimLibrary[cat] = focusAnimLibrary[cat].filter(a => a.id !== anim.id);
           if (focusAnimSelected[cat] === anim.id) focusAnimSelected[cat] = null;
-          saveFocusAnimData();
+          await saveFocusAnimData();
           syncFocusAnim();
           renderFocusAnimGrid();
         });
 
         item.appendChild(imgEl);
         item.appendChild(delBtn);
-        item.addEventListener('click', () => {
+        item.addEventListener('click', async () => {
           focusAnimSelected[cat] = anim.id;
-          saveFocusAnimData();
+          await saveFocusAnimData();
           syncFocusAnim();
           renderFocusAnimGrid();
         });
@@ -2593,35 +2903,10 @@
 
     const addBtn = document.createElement('button');
     addBtn.className = 'focus-anim-add-btn';
-    addBtn.title = '上传动画（GIF/图片）';
+    addBtn.title = '上传动画（GIF/图片，自动压缩）';
     addBtn.innerHTML = '<i class="fas fa-plus"></i>';
     addBtn.addEventListener('click', () => {
-      const inp = document.createElement('input');
-      inp.type = 'file';
-      inp.accept = 'image/gif,image/png,image/jpeg,image/webp,image/apng';
-      inp.multiple = true;
-      inp.onchange = e => {
-        const files = Array.from(e.target.files);
-        let processed = 0;
-        files.forEach(file => {
-          const reader = new FileReader();
-          reader.onload = ev => {
-            const id = 'anim_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-            const entry = { id, name: file.name.replace(/\.[^.]+$/, ''), src: ev.target.result };
-            if (!focusAnimLibrary[cat]) focusAnimLibrary[cat] = [];
-            focusAnimLibrary[cat].push(entry);
-            if (processed === 0) focusAnimSelected[cat] = id;
-            processed++;
-            if (processed === files.length) {
-              saveFocusAnimData();
-              syncFocusAnim();
-              renderFocusAnimGrid();
-            }
-          };
-          reader.readAsDataURL(file);
-        });
-      };
-      inp.click();
+      triggerFocusAnimUpload(cat);
     });
     grid.appendChild(addBtn);
   }
