@@ -311,6 +311,9 @@ body.sidebar-open .sidebar-overlay {
 }
 
 /* 气泡操作菜单控制 */
+.bubble-actions {
+    display: none;
+}
 .bubble-actions.show {
     display: flex !important;
 }
@@ -634,9 +637,7 @@ body.sidebar-open .sidebar-overlay {
     opacity: 0.5;
 }
 
-.message-bubble:hover .bubble-actions {
-    display: flex !important;
-}
+/* 移除 hover 显示，气泡操作菜单仅通过点击触发 */
 
 .bubble-actions {
     display: none;
@@ -689,6 +690,30 @@ body.sidebar-open .sidebar-overlay {
     margin-top: 20px;
     border-top: 1px solid var(--border-light);
     padding-top: 20px;
+}
+
+/* 抽屉内的分割线标签 */
+.drawer-divider-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    padding: 16px 0 8px;
+    margin-top: 4px;
+}
+
+/* 主动发消息控件 */
+.proactive-controls {
+    margin-top: 10px;
+}
+
+/* 主动发消息/通知区域（抽屉顶部区块） */
+#proactiveMsgSection,
+#notifySection {
+    border-top: 1px solid var(--border-light);
+    padding-top: 16px;
+    margin-top: 0;
 }
 
 .chat-prefs-header {
@@ -1451,6 +1476,8 @@ body.sidebar-open .sidebar-overlay {
     background-repeat: no-repeat;
     border-bottom: 1px solid var(--border-light);
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 /* 半透明蒙版 —— 保证文字在任何背景图下都能阅读 */
@@ -1479,6 +1506,47 @@ body.light-theme .profile-banner::before {
     .input-area {
         padding: 10px 12px;
     }
+
+    /* 手机端：个人主页横幅改为纵向布局 */
+    .profile-banner {
+        flex-direction: column;
+        align-items: stretch;
+        min-height: unset;
+    }
+    .profile-banner-content {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 20px 16px 12px;
+        height: auto;
+        min-height: unset;
+    }
+    .profile-banner-actions {
+        justify-content: center;
+        padding: 0 16px 16px;
+    }
+
+    /* 手机端：角色卡片改为纵向布局 */
+    .character-preview-card {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .character-preview-content {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 16px;
+    }
+    .character-preview-info {
+        align-items: center;
+    }
+    .character-preview-info p {
+        text-align: center;
+    }
+    .character-preview-actions {
+        justify-content: center;
+        padding: 0 16px 14px;
+    }
 }
 
 /* 内容层置于蒙版之上 */
@@ -1491,6 +1559,24 @@ body.light-theme .profile-banner::before {
     padding: 24px 32px;
     height: 100%;
     min-height: 110px;
+}
+
+/* 个人主页操作按钮（移到卡片内容下方） */
+.profile-banner-actions {
+    position: relative;
+    z-index: 2;
+    padding: 0 32px 20px;
+    display: flex;
+    justify-content: flex-start;
+}
+
+/* 角色卡片操作按钮（移到卡片内容下方） */
+.character-preview-actions {
+    position: relative;
+    z-index: 2;
+    padding: 0 24px 16px;
+    display: flex;
+    justify-content: flex-start;
 }
 
 /* 大头像：圆形 + 描边 + 阴影，更醒目 */
@@ -1673,6 +1759,8 @@ body.light-theme .profile-banner .btn-secondary:hover {
     border: 1px solid var(--border-light);
     background-color: var(--bg-header);
     min-height: 140px;
+    display: flex;
+    flex-direction: column;
 }
 
 .character-preview-bg {
