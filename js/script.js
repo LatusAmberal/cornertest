@@ -91,15 +91,15 @@
       const parsed = JSON.parse(saved);
       return parsed.map(m => m.role === 'user' ? { ...m, readStatus: m.readStatus || 'read' } : m);
     }
-    return [{ role: 'assistant', content: '你好！我是青绿色调的角色。点击右上角「···」配置 API 或切换白天/黑夜模式。', timestamp: Date.now() }];
+    return [{ role: 'assistant', content: '你好！我是青绿。点击右上角「···」打开控制中心调整聊天偏好和聊天记录。左上角呼出菜单，点击齿轮进入设置配置api，点击角色进入角色设置界面修改角色指令。', timestamp: Date.now() }];
   })();
 
   let config = {
     apiKey: '',
     apiUrl: 'https://api.deepseek.com/v1/chat/completions',
     model: 'deepseek-chat',
-    characterName: '青绿助手',
-    systemPrompt: '你是一个冷静又带点青涩的助手，说话简洁但偶尔流露出温柔。请用中文交流，保持角色。'
+    characterName: '青绿',
+    systemPrompt: ''
   };
 
   let isGenerating = false;
@@ -112,6 +112,20 @@
     readIgnoreProbability: 5,
     enableLongUnread: false,
     longUnreadProbability: 5
+  };
+
+  // 主动发消息状态
+  let proactiveMsgPrefs = {
+    enabled: false,
+    intervalMinutes: 60,
+    probability: 50
+  };
+  let proactiveLastCheckTs = 0;  // 上次主动消息检查时间戳
+  let proactiveTickerId = null;
+
+  // 通知状态
+  let notificationPrefs = {
+    enabled: false
   };
 
   let characterData = {
@@ -274,6 +288,191 @@
     }, 0);
   }
 
+  // ---------- 主动发消息 ----------
+  function loadProactiveMsgPrefs() {
+    try {
+      const saved = localStorage.getItem('proactive_msg_prefs');
+      if (saved) proactiveMsgPrefs = { ...proactiveMsgPrefs, ...JSON.parse(saved) };
+    } catch(e) {}
+    try {
+      const saved2 = localStorage.getItem('notification_prefs');
+      if (saved2) notificationPrefs = { ...notificationPrefs, ...JSON.parse(saved2) };
+    } catch(e) {}
+  }
+
+  function saveProactiveMsgPrefs() {
+    try { localStorage.setItem('proactive_msg_prefs', JSON.stringify(proactiveMsgPrefs)); } catch(e) {}
+  }
+
+  function saveNotificationPrefs() {
+    try { localStorage.setItem('notification_prefs', JSON.stringify(notificationPrefs)); } catch(e) {}
+  }
+
+  function buildProactiveMsgUI() {
+    const drawerContent = document.querySelector('.drawer-content');
+    if (!drawerContent) return;
+
+    // 在聊天偏好上方插入
+    const prefsSection = document.querySelector('.chat-prefs-section');
+    if (!prefsSection) return;
+
+    // --- 主动发消息功能 ---
+    const proactiveSection = document.createElement('div');
+    proactiveSection.id = 'proactiveMsgSection';
+    proactiveSection.innerHTML = `
+      <div class="drawer-divider-label">主动发消息</div>
+      <div class="chat-prefs-row">
+        <label><i class="fas fa-bolt"></i> 主动发消息</label>
+        <div class="apple-toggle" id="proactiveMsgToggle"></div>
+      </div>
+      <div class="proactive-controls" id="proactiveControls" style="display:none;">
+        <div class="probability-bar">
+          <label class="probability-label"><i class="fas fa-clock"></i> 间隔时间</label>
+          <input type="range" min="10" max="240" value="${proactiveMsgPrefs.intervalMinutes}" class="apple-slider" id="proactiveIntervalSlider">
+          <span id="proactiveIntervalVal" class="probability-value">${proactiveMsgPrefs.intervalMinutes}分钟</span>
+        </div>
+        <div class="probability-bar">
+          <label class="probability-label"><i class="fas fa-percentage"></i> 触发概率</label>
+          <input type="range" min="5" max="100" value="${proactiveMsgPrefs.probability}" class="apple-slider" id="proactiveProbSlider">
+          <span id="proactiveProbVal" class="probability-value">${proactiveMsgPrefs.probability}%</span>
+        </div>
+        <div class="chat-prefs-info">
+          AI 将在间隔时间后，以概率触发主动发消息
+        </div>
+      </div>
+    `;
+    prefsSection.before(proactiveSection);
+
+    // --- 通知功能 ---
+    const notifySection = document.createElement('div');
+    notifySection.id = 'notifySection';
+    notifySection.innerHTML = `
+      <div class="drawer-divider-label">通知</div>
+      <div class="chat-prefs-row">
+        <label><i class="fas fa-bell"></i> 通知</label>
+        <div class="apple-toggle" id="notifyToggle"></div>
+      </div>
+      <div class="chat-prefs-info" id="notifyStatusInfo">
+        开启后，AI 回复时将发送通知
+      </div>
+    `;
+    proactiveSection.after(notifySection);
+
+    // 绑定事件
+    const toggleEl = document.getElementById('proactiveMsgToggle');
+    const controlsEl = document.getElementById('proactiveControls');
+    const intervalSlider = document.getElementById('proactiveIntervalSlider');
+    const probSlider = document.getElementById('proactiveProbSlider');
+    const intervalVal = document.getElementById('proactiveIntervalVal');
+    const probVal = document.getElementById('proactiveProbVal');
+    const notifyToggle = document.getElementById('notifyToggle');
+    const notifyInfo = document.getElementById('notifyStatusInfo');
+
+    function updateSliderFill2(slider) {
+      if (!slider) return;
+      const min = Number(slider.min), max = Number(slider.max), val = Number(slider.value);
+      const pct = ((val - min) / (max - min)) * 100;
+      slider.style.background = `linear-gradient(to right, var(--accent) ${pct}%, var(--border-strong) ${pct}%)`;
+    }
+
+    // 初始化状态
+    toggleEl.classList.toggle('active', proactiveMsgPrefs.enabled);
+    controlsEl.style.display = proactiveMsgPrefs.enabled ? '' : 'none';
+    notifyToggle.classList.toggle('active', notificationPrefs.enabled);
+    updateSliderFill2(intervalSlider);
+    updateSliderFill2(probSlider);
+
+    toggleEl.addEventListener('click', () => {
+      proactiveMsgPrefs.enabled = !proactiveMsgPrefs.enabled;
+      toggleEl.classList.toggle('active', proactiveMsgPrefs.enabled);
+      controlsEl.style.display = proactiveMsgPrefs.enabled ? '' : 'none';
+      saveProactiveMsgPrefs();
+      if (proactiveMsgPrefs.enabled) startProactiveTicker();
+      else stopProactiveTicker();
+    });
+
+    intervalSlider.addEventListener('input', (e) => {
+      proactiveMsgPrefs.intervalMinutes = parseInt(e.target.value);
+      intervalVal.textContent = proactiveMsgPrefs.intervalMinutes + '分钟';
+      updateSliderFill2(e.target);
+      saveProactiveMsgPrefs();
+    });
+
+    probSlider.addEventListener('input', (e) => {
+      proactiveMsgPrefs.probability = parseInt(e.target.value);
+      probVal.textContent = proactiveMsgPrefs.probability + '%';
+      updateSliderFill2(e.target);
+      saveProactiveMsgPrefs();
+    });
+
+    notifyToggle.addEventListener('click', async () => {
+      if (!notificationPrefs.enabled) {
+        // 请求通知权限
+        if (!('Notification' in window)) {
+          showCommonDialog({ title: '不支持通知', message: '当前浏览器不支持通知功能' });
+          return;
+        }
+        const perm = await Notification.requestPermission();
+        if (perm === 'granted') {
+          notificationPrefs.enabled = true;
+          notifyToggle.classList.add('active');
+          notifyInfo.textContent = '通知已开启 ✓';
+          saveNotificationPrefs();
+        } else {
+          showCommonDialog({ title: '权限被拒绝', message: '请在浏览器设置中允许通知权限' });
+        }
+      } else {
+        notificationPrefs.enabled = false;
+        notifyToggle.classList.remove('active');
+        notifyInfo.textContent = '开启后，AI 回复时将发送通知';
+        saveNotificationPrefs();
+      }
+    });
+
+    // 如果已开启，启动 ticker
+    if (proactiveMsgPrefs.enabled) startProactiveTicker();
+  }
+
+  /** 主动发消息计时器 */
+  function startProactiveTicker() {
+    if (proactiveTickerId) clearInterval(proactiveTickerId);
+    proactiveLastCheckTs = Date.now();
+    proactiveTickerId = setInterval(checkProactiveMessage, 60 * 1000); // 每分钟检查一次
+  }
+
+  function stopProactiveTicker() {
+    if (proactiveTickerId) { clearInterval(proactiveTickerId); proactiveTickerId = null; }
+  }
+
+  /** 检查是否应该主动发消息 */
+  async function checkProactiveMessage() {
+    if (!proactiveMsgPrefs.enabled || isGenerating) return;
+    const elapsed = (Date.now() - proactiveLastCheckTs) / 1000 / 60; // 分钟
+    if (elapsed < proactiveMsgPrefs.intervalMinutes) return;
+
+    // 已到达间隔，掷骰子
+    proactiveLastCheckTs = Date.now();
+    const roll = Math.random() * 100;
+    if (roll > proactiveMsgPrefs.probability) return;
+
+    // 触发主动消息
+    const triggerMsg = await callAI('请以角色的口吻说一句话来主动开启对话（只有一条消息，简洁自然，符合角色设定）。', '你是一个辅助助手，只需输出一句话用于开启对话，不要多余内容。');
+    if (triggerMsg && triggerMsg.trim()) {
+      addMessage('assistant', triggerMsg.trim());
+      triggerNotification('青绿 发来一条消息', triggerMsg.trim());
+    }
+  }
+
+  /** 触发浏览器通知 */
+  function triggerNotification(title, body) {
+    if (!notificationPrefs.enabled || Notification.permission !== 'granted') return;
+    try {
+      const n = new Notification(title, { body, icon: 'logos/icon.png', silent: false });
+      n.onclick = () => { window.focus(); n.close(); };
+      setTimeout(() => n.close(), 8000);
+    } catch(e) { console.warn('Notification error:', e); }
+  }
+
   // ---------- 配置管理 ----------
   function populateSelectsFromConfig() {
     const url = config.apiUrl;
@@ -336,7 +535,7 @@
 
   function updateChatTitle() {
     const namePart1 = charNameInput.value.trim();
-    const fullName = namePart1 || '青绿角色';
+    const fullName = namePart1 || '青绿';
     chatTitleDisplay.textContent = fullName;
   }
 
@@ -357,7 +556,7 @@
     config.apiUrl = getVal(apiUrlInput);
     config.model = getVal(modelInput);
 
-    config.characterName = getVal(charNameInput) || '青绿角色';
+    config.characterName = getVal(charNameInput) || '青绿';
 
     config.characterBio = getVal(characterBioInput);
     config.characterAge = getVal(charAgeInput);
@@ -511,18 +710,38 @@
 
   // 消息操作函数
   window.handleBubbleClick = function(e, index) {
-    if (window.innerWidth <= 600) { // 手机端
-      const actions = e.currentTarget.querySelector('.bubble-actions');
-      if (actions.classList.contains('show')) {
-        actions.classList.remove('show');
-      } else {
-        // 先关闭其他所有已打开的
-        document.querySelectorAll('.bubble-actions').forEach(el => el.classList.remove('show'));
-        actions.classList.add('show');
-      }
-      e.stopPropagation();
+    // 点击操作按钮本身（修改/删除/收藏），不触发动作菜单切换
+    const isActionIcon = e.target.closest('.bubble-actions i');
+    if (isActionIcon) return;
+
+    const actions = e.currentTarget.querySelector('.bubble-actions');
+    if (actions.classList.contains('show')) {
+      actions.classList.remove('show');
+    } else {
+      // 关闭其他所有已打开的
+      document.querySelectorAll('.bubble-actions').forEach(el => el.classList.remove('show'));
+      actions.classList.add('show');
     }
+    e.stopPropagation();
   };
+
+  // 点击页面任意位置，关闭所有气泡操作菜单
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.bubble-actions')) {
+      document.querySelectorAll('.bubble-actions.show').forEach(el => el.classList.remove('show'));
+    }
+  });
+
+  // 滚动聊天记录时关闭气泡菜单
+  if (messagesArea) {
+    let scrollTimer;
+    messagesArea.addEventListener('scroll', () => {
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => {
+        document.querySelectorAll('.bubble-actions.show').forEach(el => el.classList.remove('show'));
+      }, 100);
+    });
+  }
 
   window.deleteMessage = function(index) {
     showCommonDialog({
@@ -860,7 +1079,7 @@
     try {
       localStorage.setItem('character_data', JSON.stringify(characterData));
       updateCharacterPreview();
-      config.characterName = getVal(charNameInput) || '青绿助手';
+      config.characterName = getVal(charNameInput) || '青绿';
       updateChatTitle();
       showToast('人物设定已保存');
     } catch(e) {
@@ -918,7 +1137,7 @@
         const systemMsg = {
             role: 'system',
             content: customSystemPrompt || `
-    ${getVal(systemPromptInput)}
+    ${getVal(systemPromptInput) || '你是一个冷静又带点青涩的助手，说话简洁但偶尔流露出温柔。请用中文交流，保持角色。'}
 
     ${charInfo}
 
@@ -1086,6 +1305,8 @@
           await new Promise(resolve => setTimeout(resolve, Math.max(0, typingDelay)));
           removeTypingIndicator();
           addMessage('assistant', sentence);
+          // AI 回复时触发通知
+          triggerNotification(charNameInput.value + ' 发来消息', sentence);
         }
       } catch(e) {
         removeTypingIndicator();
@@ -2090,6 +2311,8 @@
     normalizeFocusAfterLoad();
     renderMessages();
     buildChatPreferencesUI();
+    loadProactiveMsgPrefs();
+    buildProactiveMsgUI();
     renderLearnedTraits();
     syncFocusUI();
     if (focusState.user.running || (focusState.ai.enabled && focusState.ai.running)) ensureFocusTicker();
